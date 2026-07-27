@@ -20,9 +20,9 @@ let config = {
     channelId: '',
     roleId: '',
     messageContent: 'Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.',
-    customStatusText: 'Version 6.14.1', // Texte de la bulle
-    activityType: 'Playing',            // Type du "Joue à..."
-    activityText: 'Veiller sur le serveur' // Texte du "Joue à..."
+    customStatusText: 'Version 6.14.1',
+    activityType: 'Playing',            
+    activityText: 'Veiller sur le serveur' 
 };
 
 app.use(express.urlencoded({ extended: true }));
@@ -34,16 +34,7 @@ function updateBotStatus() {
 
     const activities = [];
 
-    // 1. On ajoute la bulle (Statut Personnalisé) si le champ n'est pas vide
-    if (config.customStatusText && config.customStatusText.trim() !== '') {
-        activities.push({
-            type: ActivityType.Custom,
-            name: 'customStatus', // Requis par l'API mais non visible
-            state: config.customStatusText // Le vrai texte de la bulle
-        });
-    }
-
-    // 2. On ajoute l'activité (Joue à, Regarde, etc.) si le champ n'est pas vide
+    // 1. On ajoute l'activité (Joue à, Regarde, etc.) EN PREMIER
     if (config.activityText && config.activityText.trim() !== '') {
         const typeMap = {
             'Playing': ActivityType.Playing,
@@ -57,8 +48,19 @@ function updateBotStatus() {
         });
     }
 
-    // On applique les activités via setPresence (méthode correcte pour discord.js v14)
-    client.user.setPresence({ activities: activities });
+    // 2. On ajoute la bulle (Statut Personnalisé) EN DEUXIÈME
+    if (config.customStatusText && config.customStatusText.trim() !== '') {
+        activities.push({
+            type: ActivityType.Custom,
+            name: 'Custom Status', // L'API de Discord exige ce nom exact
+            state: config.customStatusText 
+        });
+    }
+
+    console.log('Activités envoyées à Discord :', JSON.stringify(activities, null, 2));
+
+    // On applique les activités
+    client.user.setPresence({ activities: activities, status: 'online' });
 }
 
 // ---------------------------------------------------------
@@ -83,7 +85,6 @@ app.get('/api/guild/:guildId/data', async (req, res) => {
     res.json({ channels, roles });
 });
 
-// Route pour mettre à jour les statuts (Bulle + Activité)
 app.post('/api/status', (req, res) => {
     config.customStatusText = req.body.customStatusText;
     config.activityType = req.body.activityType;
@@ -170,27 +171,29 @@ app.get('/', (req, res) => {
                 <div id="statusAlert" class="alert"></div>
                 <form id="statusForm">
                     <div class="form-group">
-                        <label for="customStatusText">Statut Personnalisé (La bulle)</label>
-                        <input type="text" id="customStatusText" name="customStatusText" value="${config.customStatusText}">
+                        <label for="activityType">Activité (Joue à, Regarde...)</label>
+                        <div class="row">
+                            <div class="form-group">
+                                <select id="activityType" name="activityType">
+                                    <option value="Playing" ${config.activityType === 'Playing' ? 'selected' : ''}>Joue à</option>
+                                    <option value="Watching" ${config.activityType === 'Watching' ? 'selected' : ''}>Regarde</option>
+                                    <option value="Listening" ${config.activityType === 'Listening' ? 'selected' : ''}>Écoute</option>
+                                    <option value="Competing" ${config.activityType === 'Competing' ? 'selected' : ''}>Participe à</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 2;">
+                                <input type="text" id="activityText" name="activityText" value="${config.activityText}">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="separator"></div>
 
-                    <div class="row">
-                        <div class="form-group">
-                            <label for="activityType">Type d'activité</label>
-                            <select id="activityType" name="activityType">
-                                <option value="Playing" ${config.activityType === 'Playing' ? 'selected' : ''}>Joue à</option>
-                                <option value="Watching" ${config.activityType === 'Watching' ? 'selected' : ''}>Regarde</option>
-                                <option value="Listening" ${config.activityType === 'Listening' ? 'selected' : ''}>Écoute</option>
-                                <option value="Competing" ${config.activityType === 'Competing' ? 'selected' : ''}>Participe à</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="flex: 2;">
-                            <label for="activityText">Texte de l'activité</label>
-                            <input type="text" id="activityText" name="activityText" value="${config.activityText}">
-                        </div>
+                    <div class="form-group">
+                        <label for="customStatusText">Statut Personnalisé (La bulle)</label>
+                        <input type="text" id="customStatusText" name="customStatusText" value="${config.customStatusText}">
                     </div>
+
                     <button type="submit" id="statusBtn" style="background: #2dc770;">✅ Mettre à jour les statuts</button>
                 </form>
             </div>
@@ -341,7 +344,7 @@ app.listen(PORT, () => {
 
 client.once('ready', async () => {
     console.log(`Bot connecté en tant que ${client.user.tag}`);
-    updateBotStatus(); // Applique la bulle ET le joue à...
+    updateBotStatus();
 
     try {
         const commands = [ { name: 'version', description: 'Affiche la version du bot' } ];
