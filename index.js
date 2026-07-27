@@ -51,7 +51,7 @@ let config = {
     messageId: '',
     messageContent: "Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.",
     statusType: 'Playing',            
-    statusText: 'Veiller sur le serveur',
+    statusText: 'VIGI-Access',
     paydayDay: 5,
     paydayHour: 18,
     lastPaydayProcessed: null,
@@ -400,7 +400,7 @@ app.get('/', (req, res) => {
                         <input type="text" id="messageId" name="messageId" value="${config.messageId}" placeholder="Se remplit automatiquement après l'envoi">
                     </div>
 
-                    <button type="submit" class="btn btn-primary">🚀 Envoyer le Règlement</button>
+                    <button type="submit" id="submitBtn" class="btn btn-primary">🚀 Envoyer le Règlement</button>
                     <button type="button" id="editBtn" class="btn btn-secondary">✏️ Modifier le message existant</button>
                 </form>
             </div>
@@ -436,7 +436,7 @@ app.get('/', (req, res) => {
                         </label>
                     </div>
 
-                    <button type="submit" class="btn btn-gold">💰 Sauvegarder</button>
+                    <button type="submit" id="paydayBtn" class="btn btn-gold">💰 Sauvegarder</button>
                 </form>
             </div>
 
@@ -460,7 +460,7 @@ app.get('/', (req, res) => {
                         <label for="rrRoles">Rôles à proposer (Maintiens Ctrl)</label>
                         <select id="rrRoles" name="rrRoles" multiple disabled required></select>
                     </div>
-                    <button type="submit" class="btn btn-pink">🎭 Envoyer le menu</button>
+                    <button type="submit" id="rrBtn" class="btn btn-pink">🎭 Envoyer le menu</button>
                 </form>
             </div>
 
@@ -483,7 +483,7 @@ app.get('/', (req, res) => {
                             <input type="text" id="statusText" name="statusText" value="${config.statusText}" required>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-success">✅ Mettre à jour</button>
+                    <button type="submit" id="statusBtn" class="btn btn-success">✅ Mettre à jour</button>
                 </form>
             </div>
         </div>
