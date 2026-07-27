@@ -2,7 +2,10 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType, MessageFlags } = require('discord.js');
 const express = require('express');
 const pkg = require('./package.json'); 
-const embedBuilderRoute = require('./embedBuilder'); // On importe le constructeur
+const embedBuilderRoute = require('./embedBuilder'); 
+const economyManagerRoute = require('./economyManager');
+const { Client: PGClient } = require('pg'); // Pour PostgreSQL (Nova)
+const mongoose = require('mongoose'); // Pour MongoDB (Vigi)
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +17,33 @@ const client = new Client({
     ]
 });
 
+// ---------------------------------------------------------
+// CONNEXIONS AUX BASES DE DONNÉES
+// ---------------------------------------------------------
+
+// 1. Base de données de NOVA (PostgreSQL - Lecture seule pour les employés)
+const dbNova = new PGClient({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+});
+
+// 2. Base de données de VIGI (MongoDB - Économie)
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log("🟢 Connecté à MongoDB (Vigi-Access Économie) !"))
+    .catch(err => console.error("🔴 Erreur de connexion MongoDB :", err));
+
+// Modèle Mongoose pour l'économie
+const EconomySchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    balance: { type: Number, default: 0 },
+    lastPayday: { type: Date, default: null }
+});
+const Economy = mongoose.model('Economy', EconomySchema);
+
+// Connexion à PostgreSQL
+dbNova.connect().then(() => console.log("🟢 Connecté à la BDD de Nova-Bot (Employés) !")).catch(err => console.error("🔴 Erreur BDD Nova :", err));
+
+// Configuration
 let config = {
     guildId: process.env.GUILD_ID || '',
     channelId: process.env.CHANNEL_ID || '',
@@ -27,9 +57,9 @@ let config = {
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-
-// On connecte le routeur
 app.use('/', embedBuilderRoute(client));
+// On passe le client Discord, la BDD Nova (PG) et le modèle Économie (Mongo)
+app.use('/', economyManagerRoute(client, dbNova, Economy));
 
 function updateBotStatus() {
     if (!client.user) return;
@@ -44,9 +74,8 @@ function updateBotStatus() {
 }
 
 // ---------------------------------------------------------
-// PARTIE WEB
+// PARTIE WEB (Dashboard principal - Raccourci pour la lisibilité)
 // ---------------------------------------------------------
-
 app.get('/api/guilds', (req, res) => {
     const guilds = client.guilds.cache.map(g => ({ id: g.id, name: g.name }));
     res.json(guilds);
@@ -115,6 +144,7 @@ app.get('/', (req, res) => {
                 <div class="status">Statut : ${status}</div>
                 
                 <a href="/embed-builder" class="link-btn">📝 Ouvrir le Constructeur de Messages</a>
+                <a href="/economy-manager" class="link-btn">💰 Gérer l'Économie & Employés</a>
 
                 <div id="alertMsg" class="alert"></div>
 
@@ -532,7 +562,9 @@ client.once('ready', async () => {
     try {
         const commands = [ 
             { name: 'version', description: 'Affiche la version du bot' },
-            { name: 'ping', description: "Affiche la latence du bot et de l'API" } 
+            { name: 'ping', description: "Affiche la latence du bot et de l'API" },
+            { name: 'paye', description: 'Réclamer ta paye journalière en tant qu\'employé' },
+            { name: 'solde', description: 'Affiche ton solde de Vigi-Coins' }
         ];
         client.guilds.cache.forEach(async (guild) => {
             await client.application.commands.set(commands, guild.id);
@@ -599,6 +631,76 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ embeds: [pingEmbed], flags: MessageFlags.Ephemeral });
     }
 
+    // Commande /paye (Lit Nova PG, Écrit dans Vigi Mongo)
+    if (interaction.isChatInputCommand() && interaction.commandName === 'paye') {
+        const userId = interaction.user.id;
+
+        try {
+            // 1. Vigi lit la base PostgreSQL de NOVA
+            const empRes = await dbNova.query("SELECT * FROM employees WHERE user_id = $1 AND status = 'active'", [userId]);
+            
+            if (empRes.rows.length === 0) {
+                return interaction.reply({ content: "Tu n'es pas un employé actif de l'entreprise !", flags: MessageFlags.Ephemeral });
+            }
+
+            const employee = empRes.rows[0];
+            
+            // 2. Vigi lit la base MongoDB de VIGI
+            let userEco = await Economy.findOne({ userId: userId });
+
+            if (userEco && userEco.lastPayday) {
+                const lastPay = new Date(userEco.lastPayday).getTime();
+                const now = Date.now();
+                if (now - lastPay < 24 * 60 * 60 * 1000) {
+                    return interaction.reply({ content: "Tu as déjà réclamé ta paye aujourd'hui ! Reviens demain.", flags: MessageFlags.Ephemeral });
+                }
+            }
+
+            const salary = employee.stage === 'confirmed' ? 1000 : 500;
+
+            // 3. Vigi écrit dans la base MongoDB de VIGI
+            if (userEco) {
+                userEco.balance += salary;
+                userEco.lastPayday = new Date();
+                await userEco.save();
+            } else {
+                await Economy.create({ userId, balance: salary, lastPayday: new Date() });
+            }
+
+            const payEmbed = new EmbedBuilder()
+                .setColor('#2dc770')
+                .setTitle("💰 Paye journalière reçue !")
+                .setDescription("Félicitations ! Tu as reçu **" + salary + " Vigi-Coins**.\nMerci pour ton travail en tant que " + (employee.stage === 'confirmed' ? 'Titulaire' : 'En formation') + ".")
+                .setTimestamp();
+
+            return interaction.reply({ embeds: [payEmbed] });
+
+        } catch (err) {
+            console.error(err);
+            return interaction.reply({ content: "Une erreur est survenue lors du paiement.", flags: MessageFlags.Ephemeral });
+        }
+    }
+
+    // Commande /solde
+    if (interaction.isChatInputCommand() && interaction.commandName === 'solde') {
+        const userId = interaction.user.id;
+        try {
+            const userEco = await Economy.findOne({ userId: userId });
+            const balance = userEco ? userEco.balance : 0;
+            
+            const soldeEmbed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setTitle("🏦 Ton solde Vigi-Coins")
+                .setDescription("Tu possèdes actuellement **" + balance + " Vigi-Coins**.")
+                .setTimestamp();
+            return interaction.reply({ embeds: [soldeEmbed], flags: MessageFlags.Ephemeral });
+        } catch (err) {
+            console.error(err);
+            return interaction.reply({ content: "Une erreur est survenue.", flags: MessageFlags.Ephemeral });
+        }
+    }
+
+    // Gestion des Rôles à Réaction
     if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
         const roleId = interaction.customId.split('_')[1];
         try {
@@ -619,6 +721,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
+    // Gestion du Règlement
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);

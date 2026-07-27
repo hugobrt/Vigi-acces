@@ -1,6 +1,6 @@
 {
   "name": "vigi-access-beta",
-  "version": "1.0.0",
+  "version": "2J89 V2.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "mongoose": "^9.8.1",
     "multer": "^2.2.0"
-  },
-  "devDependencies": {}
+  }
 }
