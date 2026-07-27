@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType, MessageFlags } = require('discord.js');
 const express = require('express');
 const pkg = require('./package.json'); 
+const embedBuilderRoute = require('./embedBuilder'); // On importe le constructeur d'embeds
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +28,9 @@ let config = {
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+
+// On connecte le routeur du constructeur d'embeds en lui passant le client Discord
+app.use('/', embedBuilderRoute(client));
 
 function updateBotStatus() {
     if (!client.user) return;
@@ -102,6 +106,7 @@ app.get('/', (req, res) => {
             .row { display: flex; gap: 15px; }
             .row .form-group { flex: 1; }
             select[multiple] { height: 120px; }
+            .link-btn { display: block; text-align: center; background: #2b2d31; color: #5865F2; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 20px; border: 1px solid #1e1f22; }
         </style>
     </head>
     <body>
@@ -110,6 +115,9 @@ app.get('/', (req, res) => {
                 <h1>🤖 Dashboard Bot <span class="version">v${pkg.version}</span></h1>
                 <div class="status">Statut : ${status}</div>
                 
+                <!-- Lien vers le constructeur d'embeds -->
+                <a href="/embed-builder" class="link-btn">📝 Ouvrir le Constructeur d'Embeds</a>
+
                 <div id="alertMsg" class="alert"></div>
 
                 <form id="configForm">
@@ -150,7 +158,7 @@ app.get('/', (req, res) => {
                 </form>
             </div>
 
-            <!-- NOUVEAU : Générateur de Rôles à Réaction -->
+            <!-- Générateur de Rôles à Réaction -->
             <div class="container">
                 <h2>🎭 Générateur de Rôles à Réaction</h2>
                 <div id="rrAlert" class="alert"></div>
@@ -210,7 +218,6 @@ app.get('/', (req, res) => {
             const editBtn = document.getElementById('editBtn');
             const messageInput = document.getElementById('messageId');
 
-            // Éléments Rôles à Réaction
             const rrForm = document.getElementById('rrForm');
             const rrChannelSelect = document.getElementById('rrChannelId');
             const rrRolesSelect = document.getElementById('rrRoles');
@@ -256,7 +263,6 @@ app.get('/', (req, res) => {
                 logChannelSelect.innerHTML = '<option value="">Aucun</option>' + data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
                 roleSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
                 
-                // Remplissage pour les rôles à réaction
                 rrChannelSelect.innerHTML = data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
                 rrRolesSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
 
@@ -338,7 +344,6 @@ app.get('/', (req, res) => {
                 editBtn.innerText = '✏️ Modifier le message existant';
             });
 
-            // Soumission du formulaire Rôles à Réaction
             rrForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 rrBtn.disabled = true;
@@ -445,7 +450,6 @@ app.post('/setup', async (req, res) => {
     }
 });
 
-// NOUVEAU : Route pour envoyer le menu de rôles à réaction
 app.post('/api/setup-rr', async (req, res) => {
     try {
         const { channelId, title, description, roles } = req.body;
@@ -598,7 +602,6 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ embeds: [pingEmbed], flags: MessageFlags.Ephemeral });
     }
 
-    // Gestion des Rôles à Réaction
     if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
         const roleId = interaction.customId.split('_')[1];
         try {
@@ -619,7 +622,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // Gestion du Règlement
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
