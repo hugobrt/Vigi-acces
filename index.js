@@ -13,7 +13,7 @@ const client = new Client({
     ]
 });
 
-// Configuration chargée depuis les variables d'environnement (permanentes sur Render)
+// Configuration chargée depuis les variables d'environnement
 let config = {
     guildId: process.env.GUILD_ID || '',
     channelId: process.env.CHANNEL_ID || '',
@@ -101,6 +101,7 @@ app.get('/', (req, res) => {
             .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
             .row { display: flex; gap: 15px; }
             .row .form-group { flex: 1; }
+            select[multiple] { height: 120px; }
         </style>
     </head>
     <body>
@@ -149,6 +150,31 @@ app.get('/', (req, res) => {
                 </form>
             </div>
 
+            <!-- NOUVEAU : Générateur de Rôles à Réaction -->
+            <div class="container">
+                <h2>🎭 Générateur de Rôles à Réaction</h2>
+                <div id="rrAlert" class="alert"></div>
+                <form id="rrForm">
+                    <div class="form-group">
+                        <label for="rrChannelId">Salon d'envoi</label>
+                        <select id="rrChannelId" name="rrChannelId" disabled required><option value="">-</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="rrTitle">Titre du message</label>
+                        <input type="text" id="rrTitle" name="rrTitle" value="Choisis tes rôles" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="rrDescription">Description</label>
+                        <textarea id="rrDescription" name="rrDescription" rows="3">Clique sur les boutons ci-dessous pour obtenir ou retirer le rôle correspondant.</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="rrRoles">Rôles à proposer (Maintiens Ctrl pour choisir plusieurs)</label>
+                        <select id="rrRoles" name="rrRoles" multiple disabled required></select>
+                    </div>
+                    <button type="submit" id="rrBtn" style="background: #EB459E;">🎭 Envoyer le menu de rôles</button>
+                </form>
+            </div>
+
             <div class="container">
                 <h2>🎮 Activité du Bot</h2>
                 <div id="statusAlert" class="alert"></div>
@@ -184,6 +210,13 @@ app.get('/', (req, res) => {
             const editBtn = document.getElementById('editBtn');
             const messageInput = document.getElementById('messageId');
 
+            // Éléments Rôles à Réaction
+            const rrForm = document.getElementById('rrForm');
+            const rrChannelSelect = document.getElementById('rrChannelId');
+            const rrRolesSelect = document.getElementById('rrRoles');
+            const rrBtn = document.getElementById('rrBtn');
+            const rrAlert = document.getElementById('rrAlert');
+
             const statusForm = document.getElementById('statusForm');
             const statusBtn = document.getElementById('statusBtn');
             const statusAlert = document.getElementById('statusAlert');
@@ -205,9 +238,14 @@ app.get('/', (req, res) => {
                 channelSelect.disabled = true;
                 roleSelect.disabled = true;
                 logChannelSelect.disabled = true;
+                rrChannelSelect.disabled = true;
+                rrRolesSelect.disabled = true;
+
                 channelSelect.innerHTML = '<option>Chargement...</option>';
                 roleSelect.innerHTML = '<option>Chargement...</option>';
                 logChannelSelect.innerHTML = '<option>Chargement...</option>';
+                rrChannelSelect.innerHTML = '<option>Chargement...</option>';
+                rrRolesSelect.innerHTML = '<option>Chargement...</option>';
 
                 if (!guildId) return;
 
@@ -218,9 +256,15 @@ app.get('/', (req, res) => {
                 logChannelSelect.innerHTML = '<option value="">Aucun</option>' + data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
                 roleSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
                 
+                // Remplissage pour les rôles à réaction
+                rrChannelSelect.innerHTML = data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
+                rrRolesSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
+
                 channelSelect.disabled = false;
                 roleSelect.disabled = false;
                 logChannelSelect.disabled = false;
+                rrChannelSelect.disabled = false;
+                rrRolesSelect.disabled = false;
 
                 if ("${config.channelId}") channelSelect.value = "${config.channelId}";
                 if ("${config.logChannelId}") logChannelSelect.value = "${config.logChannelId}";
@@ -294,6 +338,43 @@ app.get('/', (req, res) => {
                 editBtn.innerText = '✏️ Modifier le message existant';
             });
 
+            // Soumission du formulaire Rôles à Réaction
+            rrForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                rrBtn.disabled = true;
+                rrBtn.innerText = 'Envoi en cours...';
+                rrAlert.style.display = 'none';
+
+                const selectedRoles = Array.from(rrRolesSelect.selectedOptions).map(opt => opt.value);
+
+                const data = {
+                    channelId: rrChannelSelect.value,
+                    title: document.getElementById('rrTitle').value,
+                    description: document.getElementById('rrDescription').value,
+                    roles: selectedRoles
+                };
+
+                try {
+                    const res = await fetch('/api/setup-rr', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const result = await res.json();
+
+                    rrAlert.style.display = 'block';
+                    rrAlert.className = result.success ? 'alert success' : 'alert error';
+                    rrAlert.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
+                } catch (err) {
+                    rrAlert.style.display = 'block';
+                    rrAlert.className = 'alert error';
+                    rrAlert.innerText = '❌ Erreur réseau.';
+                }
+
+                rrBtn.disabled = false;
+                rrBtn.innerText = '🎭 Envoyer le menu de rôles';
+            });
+
             statusForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 statusBtn.disabled = true;
@@ -364,6 +445,52 @@ app.post('/setup', async (req, res) => {
     }
 });
 
+// NOUVEAU : Route pour envoyer le menu de rôles à réaction
+app.post('/api/setup-rr', async (req, res) => {
+    try {
+        const { channelId, title, description, roles } = req.body;
+        
+        if (!roles || roles.length === 0) return res.json({ success: false, message: 'Sélectionne au moins un rôle.' });
+        if (roles.length > 25) return res.json({ success: false, message: 'Maximum 25 rôles par message (limite de Discord).' });
+
+        const channel = await client.channels.fetch(channelId);
+        if (!channel) return res.json({ success: false, message: 'Salon introuvable.' });
+
+        const embed = new EmbedBuilder()
+            .setTitle(title || "Choisis tes rôles")
+            .setDescription(description || "Clique sur les boutons ci-dessous pour obtenir ou retirer le rôle correspondant.")
+            .setColor('#EB459E');
+
+        const rows = [];
+        let currentRow = new ActionRowBuilder();
+        let count = 0;
+
+        for (const roleId of roles) {
+            const role = await channel.guild.roles.fetch(roleId);
+            if (role) {
+                const btn = new ButtonBuilder()
+                    .setCustomId('rr_' + roleId)
+                    .setLabel(role.name.length > 70 ? role.name.substring(0, 67) + '...' : role.name)
+                    .setStyle(ButtonStyle.Primary);
+                
+                currentRow.addComponents(btn);
+                count++;
+                if (count % 5 === 0) {
+                    rows.push(currentRow);
+                    currentRow = new ActionRowBuilder();
+                }
+            }
+        }
+        if (count % 5 !== 0) rows.push(currentRow);
+
+        await channel.send({ embeds: [embed], components: rows });
+        res.json({ success: true, message: 'Le menu de rôles a été envoyé !' });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: error.message });
+    }
+});
+
 app.post('/edit', async (req, res) => {
     try {
         const { guildId, channelId, messageId, messageContent } = req.body;
@@ -414,7 +541,6 @@ client.once('ready', async () => {
         console.error("Impossible d'enregistrer les commandes slash :", err);
     }
 
-    // NOUVEAU : Message de démarrage dans le salon des logs
     if (config.logChannelId) {
         try {
             const logChannel = await client.channels.fetch(config.logChannelId);
@@ -427,10 +553,10 @@ client.once('ready', async () => {
                     .setColor('#2dc770')
                     .setDescription("Le bot est de nouveau en ligne et opérationnel !")
                     .addFields(
-                        { name: '🏷️ Version', value: `\`${pkg.version}\``, inline: true },
-                        { name: '🌐 Latence Bot', value: `\`${botLatency}ms\``, inline: true },
-                        { name: "⚡ Latence API", value: `\`${apiLatency}ms\``, inline: true },
-                        { name: '⚙️ Statut Commandes', value: `Synchronisées et actives ✅`, inline: false }
+                        { name: '🏷️ Version', value: '`' + pkg.version + '`', inline: true },
+                        { name: '🌐 Latence Bot', value: '`' + botLatency + 'ms`', inline: true },
+                        { name: "⚡ Latence API", value: '`' + apiLatency + 'ms`', inline: true },
+                        { name: '⚙️ Statut Commandes', value: 'Synchronisées et actives ✅', inline: false }
                     )
                     .setFooter({ text: "Protection active : OK | Captcha validation systeme OK" })
                     .setTimestamp();
@@ -442,7 +568,7 @@ client.once('ready', async () => {
         }
     }
     
-    const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    const url = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
     setInterval(() => {
         fetch(url)
             .then(() => console.log('Ping de maintien en vie envoyé'))
@@ -454,7 +580,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand() && interaction.commandName === 'version') {
         const versionEmbed = new EmbedBuilder()
             .setColor('#2b2d31') 
-            .setDescription(`**Version ${pkg.version}**`);
+            .setDescription('**Version ' + pkg.version + '**');
         return interaction.reply({ embeds: [versionEmbed], flags: MessageFlags.Ephemeral });
     }
 
@@ -466,12 +592,34 @@ client.on('interactionCreate', async interaction => {
             .setTitle('🏓 Pong !')
             .setColor('#5865F2')
             .addFields(
-                { name: '🌐 Latence du Bot', value: `${botLatency}ms`, inline: true },
-                { name: "⚡ Latence de l'API", value: `${apiLatency}ms`, inline: true }
+                { name: '🌐 Latence du Bot', value: botLatency + 'ms', inline: true },
+                { name: "⚡ Latence de l'API", value: apiLatency + 'ms', inline: true }
             );
         return interaction.reply({ embeds: [pingEmbed], flags: MessageFlags.Ephemeral });
     }
 
+    // Gestion des Rôles à Réaction
+    if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
+        const roleId = interaction.customId.split('_')[1];
+        try {
+            const role = await interaction.guild.roles.fetch(roleId);
+            if (!role) return interaction.reply({ content: "Ce rôle n'existe plus.", flags: MessageFlags.Ephemeral });
+
+            const member = interaction.member;
+            if (member.roles.cache.has(role.id)) {
+                await member.roles.remove(role);
+                return interaction.reply({ content: "❌ Le rôle **" + role.name + "** t'a été retiré.", flags: MessageFlags.Ephemeral });
+            } else {
+                await member.roles.add(role);
+                return interaction.reply({ content: "✅ Le rôle **" + role.name + "** t'a été attribué.", flags: MessageFlags.Ephemeral });
+            }
+        } catch (err) {
+            console.error(err);
+            return interaction.reply({ content: "❌ Je n'ai pas la permission de gérer ce rôle.", flags: MessageFlags.Ephemeral });
+        }
+    }
+
+    // Gestion du Règlement
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
@@ -499,7 +647,7 @@ client.on('interactionCreate', async interaction => {
                     } else {
                         row.addComponents(
                             new ButtonBuilder()
-                                .setCustomId(`captcha_no_${btnIndex}`)
+                                .setCustomId('captcha_no_' + btnIndex)
                                 .setEmoji('🟥')
                                 .setStyle(ButtonStyle.Secondary)
                         );
