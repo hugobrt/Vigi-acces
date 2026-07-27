@@ -1,5 +1,9 @@
 const express = require('express');
-const { EmbedBuilder } = require('discord.js');
+const multer = require('multer');
+const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
+
+// Configuration de Multer pour stocker l'image en mémoire temporairement
+const upload = multer({ storage: multer.memoryStorage() });
 
 module.exports = function(client) {
     const router = express.Router();
@@ -22,7 +26,7 @@ module.exports = function(client) {
                 .back-link { display: inline-block; margin-bottom: 20px; color: #5865F2; text-decoration: none; font-weight: 600; }
                 .form-group { margin-bottom: 20px; }
                 label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #b5bac1; letter-spacing: 0.5px; }
-                select, input[type="text"], input[type="url"], textarea { width: 100%; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; padding: 12px; color: #dbdee1; font-size: 16px; outline: none; transition: border-color 0.2s; }
+                select, input[type="text"], input[type="url"], textarea, input[type="file"] { width: 100%; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; padding: 12px; color: #dbdee1; font-size: 16px; outline: none; transition: border-color 0.2s; }
                 select:focus, input:focus, textarea:focus { border-color: #5865F2; }
                 textarea { resize: vertical; min-height: 80px; }
                 button { background: #5865F2; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; transition: background 0.2s; }
@@ -78,8 +82,8 @@ module.exports = function(client) {
                     </div>
 
                     <div class="form-group">
-                        <label for="imageUrl">URL de l'image principale (Optionnel)</label>
-                        <input type="url" id="imageUrl" placeholder="https://exemple.com/image.png">
+                        <label for="imageUpload">Image depuis ton PC (Optionnel)</label>
+                        <input type="file" id="imageUpload" accept="image/*">
                     </div>
 
                     <button type="submit" id="submitBtn">🚀 Envoyer le message Embed</button>
@@ -118,20 +122,23 @@ module.exports = function(client) {
                     submitBtn.innerText = 'Envoi en cours...';
                     alertMsg.style.display = 'none';
 
-                    const data = {
-                        channelId: channelSelect.value,
-                        title: document.getElementById('title').value,
-                        description: document.getElementById('description').value,
-                        color: document.getElementById('color').value,
-                        footerText: document.getElementById('footerText').value,
-                        imageUrl: document.getElementById('imageUrl').value
-                    };
+                    // On utilise FormData pour pouvoir envoyer le fichier image
+                    const formData = new FormData();
+                    formData.append('channelId', channelSelect.value);
+                    formData.append('title', document.getElementById('title').value);
+                    formData.append('description', document.getElementById('description').value);
+                    formData.append('color', document.getElementById('color').value);
+                    formData.append('footerText', document.getElementById('footerText').value);
+                    
+                    const imageFile = document.getElementById('imageUpload').files[0];
+                    if (imageFile) {
+                        formData.append('imageFile', imageFile);
+                    }
 
                     try {
                         const res = await fetch('/api/send-embed', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(data)
+                            body: formData // Ne pas mettre de headers Content-Type, le navigateur le fait tout seul avec la frontière
                         });
                         const result = await res.json();
 
@@ -155,9 +162,10 @@ module.exports = function(client) {
         res.send(html);
     });
 
-    router.post('/api/send-embed', async (req, res) => {
+    // Route POST avec la gestion du fichier (upload.single)
+    router.post('/api/send-embed', upload.single('imageFile'), async (req, res) => {
         try {
-            const { channelId, title, description, color, footerText, imageUrl } = req.body;
+            const { channelId, title, description, color, footerText } = req.body;
             const channel = await client.channels.fetch(channelId);
             if (!channel) return res.json({ success: false, message: 'Salon introuvable.' });
 
@@ -167,9 +175,16 @@ module.exports = function(client) {
             if (description) embed.setDescription(description);
             if (color) embed.setColor(color);
             if (footerText) embed.setFooter({ text: footerText });
-            if (imageUrl) embed.setImage(imageUrl);
 
-            await channel.send({ embeds: [embed] });
+            const files = [];
+            // Si un fichier a été uploadé
+            if (req.file) {
+                const attachment = new AttachmentBuilder(req.file.buffer, { name: req.file.originalname });
+                files.push(attachment);
+                embed.setImage('attachment://' + req.file.originalname);
+            }
+
+            await channel.send({ embeds: [embed], files });
             res.json({ success: true, message: "Le message embed a été envoyé avec succès !" });
         } catch (error) {
             console.error(error);
