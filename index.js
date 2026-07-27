@@ -482,8 +482,7 @@ client.once('ready', async () => {
         const commands = [ 
             { name: 'version', description: 'Affiche la version du bot' },
             { name: 'ping', description: "Affiche la latence du bot et de l'API" },
-            { name: 'solde', description: 'Affiche ton solde de Vigi-Coins' },
-            { name: 'banque', description: 'Génère ton code d\'accès à la Vigi-Banque' }
+            { name: 'solde', description: 'Affiche ton solde de Vigi-Coins' }
         ];
         client.guilds.cache.forEach(async (guild) => { await client.application.commands.set(commands, guild.id); });
         console.log('Commandes slash enregistrées !');
@@ -496,7 +495,7 @@ client.once('ready', async () => {
                 const botLatency = Date.now() - client.readyTimestamp; const apiLatency = Math.round(client.ws.ping);
                 const pgStatus = isPgConnected ? '🟢 Connecté' : '🔴 Erreur';
                 const mongoStatus = mongoose.connection.readyState === 1 ? '🟢 Connecté' : '🔴 Erreur';
-                const commandList = '`/version` • `/ping` • `/solde` • `/banque`';
+                const commandList = '`/version` • `/ping` • `/solde`';
                 const paydayStatus = config.paydayEnabled ? '✅ Active' : '🔴 Suspendue';
                 
                 const startupEmbed = new EmbedBuilder()
@@ -574,28 +573,6 @@ client.on('interactionCreate', async interaction => {
             const soldeEmbed = new EmbedBuilder().setColor('#5865F2').setTitle("🏦 Ton solde Vigi-Coins").setDescription("Tu possèdes actuellement **" + balance + " Vigi-Coins**.").setTimestamp();
             return interaction.reply({ embeds: [soldeEmbed], flags: MessageFlags.Ephemeral });
         } catch (err) { console.error(err); return interaction.reply({ content: "Une erreur est survenue.", flags: MessageFlags.Ephemeral }); }
-    }
-
-    if (interaction.isChatInputCommand() && interaction.commandName === 'banque') {
-        const userId = interaction.user.id;
-        try {
-            const empRes = await dbNova.query("SELECT * FROM employees WHERE user_id = $1 AND status = 'active'", [userId]);
-            if (empRes.rows.length === 0) return interaction.reply({ content: "❌ Seuls les employés actifs de l'entreprise peuvent ouvrir un compte en banque.", flags: MessageFlags.Ephemeral });
-            
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
-            let userEco = await Economy.findOne({ userId });
-            if (userEco) { userEco.bankCode = code; await userEco.save(); } 
-            else { await Economy.create({ userId, balance: 0, bankCode: code }); }
-
-            const bankUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
-            await interaction.reply({ 
-                content: `🏦 **Vigi-Banque**\n\nTon code d'accès personnel est : **${code}**\nGarde-le précieusement !\nAccède à ton compte en ligne ici : ${bankUrl}/bank`, 
-                flags: MessageFlags.Ephemeral 
-            });
-        } catch (err) {
-            console.error(err);
-            return interaction.reply({ content: "Une erreur est survenue lors de la vérification de ton statut d'employé.", flags: MessageFlags.Ephemeral });
-        }
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
