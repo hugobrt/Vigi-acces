@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 
-// Configuration de Multer pour stocker l'image en mémoire temporairement
 const upload = multer({ storage: multer.memoryStorage() });
 
 module.exports = function(client) {
@@ -122,7 +121,6 @@ module.exports = function(client) {
                     submitBtn.innerText = 'Envoi en cours...';
                     alertMsg.style.display = 'none';
 
-                    // On utilise FormData pour pouvoir envoyer le fichier image
                     const formData = new FormData();
                     formData.append('channelId', channelSelect.value);
                     formData.append('title', document.getElementById('title').value);
@@ -138,7 +136,7 @@ module.exports = function(client) {
                     try {
                         const res = await fetch('/api/send-embed', {
                             method: 'POST',
-                            body: formData // Ne pas mettre de headers Content-Type, le navigateur le fait tout seul avec la frontière
+                            body: formData
                         });
                         const result = await res.json();
 
@@ -162,7 +160,6 @@ module.exports = function(client) {
         res.send(html);
     });
 
-    // Route POST avec la gestion du fichier (upload.single)
     router.post('/api/send-embed', upload.single('imageFile'), async (req, res) => {
         try {
             const { channelId, title, description, color, footerText } = req.body;
@@ -177,9 +174,7 @@ module.exports = function(client) {
             if (footerText) embed.setFooter({ text: footerText });
 
             const files = [];
-            // Si un fichier a été uploadé
             if (req.file) {
-                // On remplace les espaces et les caractères spéciaux par des underscores
                 const safeFileName = req.file.originalname.replace(/\s+/g, '_');
                 const attachment = new AttachmentBuilder(req.file.buffer, { name: safeFileName });
                 files.push(attachment);
