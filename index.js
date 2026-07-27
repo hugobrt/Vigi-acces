@@ -2,7 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType, MessageFlags } = require('discord.js');
 const express = require('express');
 const pkg = require('./package.json'); 
-const embedBuilderRoute = require('./embedBuilder'); // On importe le constructeur d'embeds
+const embedBuilderRoute = require('./embedBuilder'); // On importe le constructeur
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,7 +14,6 @@ const client = new Client({
     ]
 });
 
-// Configuration chargée depuis les variables d'environnement
 let config = {
     guildId: process.env.GUILD_ID || '',
     channelId: process.env.CHANNEL_ID || '',
@@ -29,7 +28,7 @@ let config = {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// On connecte le routeur du constructeur d'embeds en lui passant le client Discord
+// On connecte le routeur
 app.use('/', embedBuilderRoute(client));
 
 function updateBotStatus() {
@@ -45,7 +44,7 @@ function updateBotStatus() {
 }
 
 // ---------------------------------------------------------
-// PARTIE WEB (API + Interface)
+// PARTIE WEB
 // ---------------------------------------------------------
 
 app.get('/api/guilds', (req, res) => {
@@ -115,8 +114,7 @@ app.get('/', (req, res) => {
                 <h1>🤖 Dashboard Bot <span class="version">v${pkg.version}</span></h1>
                 <div class="status">Statut : ${status}</div>
                 
-                <!-- Lien vers le constructeur d'embeds -->
-                <a href="/embed-builder" class="link-btn">📝 Ouvrir le Constructeur d'Embeds</a>
+                <a href="/embed-builder" class="link-btn">📝 Ouvrir le Constructeur de Messages</a>
 
                 <div id="alertMsg" class="alert"></div>
 
@@ -158,7 +156,6 @@ app.get('/', (req, res) => {
                 </form>
             </div>
 
-            <!-- Générateur de Rôles à Réaction -->
             <div class="container">
                 <h2>🎭 Générateur de Rôles à Réaction</h2>
                 <div id="rrAlert" class="alert"></div>
