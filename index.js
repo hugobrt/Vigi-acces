@@ -55,7 +55,7 @@ let config = {
     paydayDay: 5,
     paydayHour: 18,
     lastPaydayProcessed: null,
-    paydayEnabled: true // NOUVEAU : Interrupteur des paies
+    paydayEnabled: true
 };
 
 app.use(express.urlencoded({ extended: true }));
@@ -144,7 +144,7 @@ app.post('/api/status', (req, res) => {
 app.post('/api/payday-config', (req, res) => {
     config.paydayDay = parseInt(req.body.paydayDay);
     config.paydayHour = parseInt(req.body.paydayHour);
-    config.paydayEnabled = req.body.paydayEnabled === true || req.body.paydayEnabled === 'true'; // NOUVEAU
+    config.paydayEnabled = req.body.paydayEnabled === true || req.body.paydayEnabled === 'true';
     res.json({ success: true, message: 'Configuration des paies enregistrée !' });
 });
 
@@ -182,7 +182,6 @@ app.get('/', (req, res) => {
             .row .form-group { flex: 1; }
             select[multiple] { height: 120px; }
             .link-btn { display: block; text-align: center; background: #2b2d31; color: #5865F2; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 20px; border: 1px solid #1e1f22; }
-            /* Style de l'interrupteur */
             .toggle-container { display: flex; align-items: center; gap: 12px; margin-top: 15px; background: #1e1f22; padding: 15px; border-radius: 8px; }
             .toggle-container label { margin: 0; cursor: pointer; }
             .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
@@ -242,7 +241,6 @@ app.get('/', (req, res) => {
                 </form>
             </div>
 
-            <!-- Configuration des Paies -->
             <div class="container">
                 <h2>📅 Configuration des Paies Automatiques</h2>
                 <div id="paydayAlert" class="alert"></div>
@@ -266,7 +264,6 @@ app.get('/', (req, res) => {
                         </div>
                     </div>
 
-                    <!-- NOUVEAU : Interrupteur ON/OFF -->
                     <div class="toggle-container">
                         <label class="switch">
                             <input type="checkbox" id="paydayEnabled" name="paydayEnabled" ${config.paydayEnabled ? 'checked' : ''}>
@@ -468,7 +465,6 @@ app.get('/', (req, res) => {
                 editBtn.innerText = '✏️ Modifier le message existant';
             });
 
-            // Soumission config paie
             paydayForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 paydayBtn.disabled = true;
@@ -478,7 +474,7 @@ app.get('/', (req, res) => {
                 const data = {
                     paydayDay: document.getElementById('paydayDay').value,
                     paydayHour: document.getElementById('paydayHour').value,
-                    paydayEnabled: document.getElementById('paydayEnabled').checked // NOUVEAU
+                    paydayEnabled: document.getElementById('paydayEnabled').checked
                 };
 
                 try {
@@ -733,6 +729,45 @@ client.once('ready', async () => {
                     .setTimestamp();
 
                 await logChannel.send({ embeds: [startupEmbed] });
+
+                // NOUVEAU : Bilan de santé 30 secondes après le démarrage
+                setTimeout(async () => {
+                    try {
+                        const botLatency30s = Date.now() - client.readyTimestamp;
+                        const apiLatency30s = Math.round(client.ws.ping);
+
+                        // Test actif de la connexion PostgreSQL
+                        let pgStatus30s = '🔴 Déconnecté';
+                        try {
+                            await dbNova.query('SELECT 1');
+                            pgStatus30s = '🟢 Connecté';
+                        } catch (e) {
+                            pgStatus30s = '🔴 Erreur';
+                        }
+
+                        // Test de l'état de MongoDB
+                        const mongoStatus30s = mongoose.connection.readyState === 1 ? '🟢 Connecté' : '🔴 Erreur';
+                        const globalStatus = (pgStatus30s.includes('🟢') && mongoStatus30s.includes('🟢')) ? '✅ Stable' : '⚠️ Instable';
+
+                        const healthEmbed = new EmbedBuilder()
+                            .setTitle("🩺 Vérification Post-Démarrage (30s)")
+                            .setColor(pgStatus30s.includes('🟢') && mongoStatus30s.includes('🟢') ? '#2dc770' : '#f23f42')
+                            .setDescription("Vérification de la stabilité des connexions 30 secondes après le lancement.")
+                            .addFields(
+                                { name: '🌐 Latence Bot', value: '`' + botLatency30s + 'ms`', inline: true },
+                                { name: "⚡ Latence API", value: '`' + apiLatency30s + 'ms`', inline: true },
+                                { name: '🚦 État Global', value: globalStatus, inline: true },
+                                { name: '🗄️ BDD Nova (PostgreSQL)', value: pgStatus30s, inline: true },
+                                { name: '💰 BDD Vigi (MongoDB)', value: mongoStatus30s, inline: true }
+                            )
+                            .setTimestamp();
+
+                        await logChannel.send({ embeds: [healthEmbed] });
+                    } catch (e) {
+                        console.error("Erreur lors du health check :", e);
+                    }
+                }, 30000); // 30 000 ms = 30 secondes
+
             }
         } catch (e) {
             console.error("Impossible d'envoyer le message de log :", e);
@@ -748,7 +783,7 @@ client.once('ready', async () => {
 
     // Tâche de fond pour les paies automatiques
     setInterval(async () => {
-        if (!config.paydayEnabled) return; // Si c'est coupé, on ne fait rien
+        if (!config.paydayEnabled) return;
 
         const now = new Date();
         const day = now.getDay(); 
