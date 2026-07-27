@@ -19,7 +19,7 @@ let config = {
     guildId: '',
     channelId: '',
     roleId: '',
-    messageId: '', // NOUVEAU : Pour stocker l'ID du message à éditer
+    messageId: '',
     messageContent: 'Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.',
     statusType: 'Playing',            
     statusText: 'Veiller sur le serveur' 
@@ -140,14 +140,12 @@ app.get('/', (req, res) => {
                         <textarea id="messageContent" name="messageContent" rows="5" required>${config.messageContent}</textarea>
                     </div>
 
-                    <!-- NOUVEAU : Champ pour l'ID du message (pour l'édition) -->
                     <div class="form-group">
                         <label for="messageId">ID du message (Pour l'éditer)</label>
                         <input type="text" id="messageId" name="messageId" value="${config.messageId}" placeholder="Se remplit automatiquement après l'envoi">
                     </div>
 
                     <button type="submit" id="submitBtn">🚀 Envoyer le Règlement</button>
-                    <!-- NOUVEAU : Bouton d'édition -->
                     <button type="button" id="editBtn" class="secondary">✏️ Modifier le message existant</button>
                 </form>
             </div>
@@ -183,8 +181,8 @@ app.get('/', (req, res) => {
             const form = document.getElementById('configForm');
             const alertMsg = document.getElementById('alertMsg');
             const submitBtn = document.getElementById('submitBtn');
-            const editBtn = document.getElementById('editBtn'); // NOUVEAU
-            const messageInput = document.getElementById('messageId'); // NOUVEAU
+            const editBtn = document.getElementById('editBtn');
+            const messageInput = document.getElementById('messageId');
 
             const statusForm = document.getElementById('statusForm');
             const statusBtn = document.getElementById('statusBtn');
@@ -215,7 +213,6 @@ app.get('/', (req, res) => {
                 roleSelect.disabled = false;
             });
 
-            // Envoi du formulaire (Envoyer le règlement)
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 submitBtn.disabled = true;
@@ -237,7 +234,6 @@ app.get('/', (req, res) => {
                     alertMsg.className = result.success ? 'alert success' : 'alert error';
                     alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
                     
-                    // NOUVEAU : Si l'envoi réussit, on met l'ID du message dans le champ
                     if (result.success && result.messageId) {
                         messageInput.value = result.messageId;
                     }
@@ -251,7 +247,6 @@ app.get('/', (req, res) => {
                 submitBtn.innerText = '🚀 Envoyer le Règlement';
             });
 
-            // NOUVEAU : Bouton Modifier
             editBtn.addEventListener('click', async () => {
                 editBtn.disabled = true;
                 editBtn.innerText = 'Édition en cours...';
@@ -322,7 +317,6 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
-// Route pour envoyer le message
 app.post('/setup', async (req, res) => {
     try {
         config.guildId = req.body.guildId;
@@ -342,12 +336,12 @@ app.post('/setup', async (req, res) => {
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('accept_rules')
-                    .setLabel(`✅ J'accepte le règlement`)
+                    .setLabel("✅ J'accepte le règlement")
                     .setStyle(ButtonStyle.Success)
             );
 
         const sentMessage = await channel.send({ embeds: [embed], components: [row] });
-        config.messageId = sentMessage.id; // Le bot sauvegarde l'ID du message
+        config.messageId = sentMessage.id;
         
         res.json({ success: true, message: 'Le règlement a été envoyé dans le salon !', messageId: sentMessage.id });
     } catch (error) {
@@ -356,7 +350,6 @@ app.post('/setup', async (req, res) => {
     }
 });
 
-// NOUVEAU : Route pour éditer le message
 app.post('/edit', async (req, res) => {
     try {
         const { guildId, channelId, messageId, messageContent } = req.body;
@@ -367,7 +360,7 @@ app.post('/edit', async (req, res) => {
         if (!channel) return res.json({ success: false, message: 'Salon introuvable.' });
 
         const message = await channel.messages.fetch(messageId);
-        if (!message) return res.json({ success: false, message: 'Message introuvable. Il a peut-être été supprimé.' });
+        if (!message) return res.json({ success: false, message: 'Message introuvable.' });
 
         const embed = new EmbedBuilder()
             .setTitle('📜 Règlement du Serveur')
@@ -375,7 +368,7 @@ app.post('/edit', async (req, res) => {
             .setColor('#5865F2');
 
         await message.edit({ embeds: [embed] });
-        res.json({ success: true, message: 'Le règlement a été modifié à distance avec succès !' });
+        res.json({ success: true, message: 'Le règlement a été modifié à distance !' });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
@@ -395,10 +388,9 @@ client.once('ready', async () => {
     updateBotStatus();
 
     try {
-        // NOUVEAU : Ajout de la commande /ping
         const commands = [ 
             { name: 'version', description: 'Affiche la version du bot' },
-            { name: 'ping', description: 'Affiche la latence du bot et de l\\'API' } 
+            { name: 'ping', description: "Affiche la latence du bot et de l'API" } 
         ];
         client.guilds.cache.forEach(async (guild) => {
             await client.application.commands.set(commands, guild.id);
@@ -408,7 +400,6 @@ client.once('ready', async () => {
         console.error("Impossible d'enregistrer les commandes slash :", err);
     }
     
-    // Système Anti-Sleep pour Render
     const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
     setInterval(() => {
         fetch(url)
@@ -418,7 +409,6 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    // 1. Commande /version
     if (interaction.isChatInputCommand() && interaction.commandName === 'version') {
         const versionEmbed = new EmbedBuilder()
             .setColor('#2b2d31') 
@@ -426,7 +416,6 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ embeds: [versionEmbed], flags: MessageFlags.Ephemeral });
     }
 
-    // NOUVEAU : 2. Commande /ping
     if (interaction.isChatInputCommand() && interaction.commandName === 'ping') {
         const botLatency = Date.now() - interaction.createdTimestamp;
         const apiLatency = Math.round(client.ws.ping);
@@ -436,20 +425,19 @@ client.on('interactionCreate', async interaction => {
             .setColor('#5865F2')
             .addFields(
                 { name: '🌐 Latence du Bot', value: `${botLatency}ms`, inline: true },
-                { name: '⚡ Latence de l\\'API', value: `${apiLatency}ms`, inline: true }
+                { name: "⚡ Latence de l'API", value: `${apiLatency}ms`, inline: true }
             );
         return interaction.reply({ embeds: [pingEmbed], flags: MessageFlags.Ephemeral });
     }
 
-    // 3. Bouton "J'accepte le règlement" -> Déclenche le Captcha Visuel
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
-            if (!role) return interaction.reply({ content: `Erreur : Rôle introuvable.`, flags: MessageFlags.Ephemeral });
+            if (!role) return interaction.reply({ content: "Erreur : Rôle introuvable.", flags: MessageFlags.Ephemeral });
 
             const member = interaction.member;
             if (member.roles.cache.has(role.id)) {
-                return interaction.reply({ content: `Tu as déjà accepté le règlement !`, flags: MessageFlags.Ephemeral });
+                return interaction.reply({ content: "Tu as déjà accepté le règlement !", flags: MessageFlags.Ephemeral });
             }
 
             const greenIndex = Math.floor(Math.random() * 9);
@@ -480,40 +468,39 @@ client.on('interactionCreate', async interaction => {
             }
 
             const captchaEmbed = new EmbedBuilder()
-                .setTitle(`🤖 Vérification Anti-Bot`)
-                .setDescription(`Pour valider ton accès au serveur, prouve que tu es humain.\n### **Clique sur le carré VERT 🟩**`)
+                .setTitle("🤖 Vérification Anti-Bot")
+                .setDescription("Pour valider ton accès au serveur, prouve que tu es humain.\n### **Clique sur le carré VERT 🟩**")
                 .setColor('#FFA500')
-                .setFooter({ text: `Si tu te trompes, tu devras recommencer.` });
+                .setFooter({ text: "Si tu te trompes, tu devras recommencer." });
 
             return interaction.reply({ embeds: [captchaEmbed], components: rows, flags: MessageFlags.Ephemeral });
 
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: `Une erreur est survenue.`, flags: MessageFlags.Ephemeral });
+            await interaction.reply({ content: "Une erreur est survenue.", flags: MessageFlags.Ephemeral });
         }
     }
 
-    // 4. Gestion des clics sur le Captcha
     if (interaction.isButton() && interaction.customId.startsWith('captcha_')) {
         const isCorrect = interaction.customId === 'captcha_ok';
         const role = await interaction.guild.roles.fetch(config.roleId);
 
-        if (!role) return interaction.update({ content: `Erreur : Le rôle est introuvable.`, components: [] });
+        if (!role) return interaction.update({ content: "Erreur : Le rôle est introuvable.", components: [] });
 
         if (isCorrect) {
             try {
                 await interaction.member.roles.add(role);
                 const successEmbed = new EmbedBuilder()
                     .setColor('#2dc770')
-                    .setDescription(`✅ **Vérification réussie !** Tu as prouvé que tu n'es pas un robot. Tu as maintenant accès au serveur. 🎉`);
+                    .setDescription("✅ **Vérification réussie !** Tu as prouvé que tu n'es pas un robot. Tu as maintenant accès au serveur. 🎉");
                 return interaction.update({ embeds: [successEmbed], components: [] });
             } catch (err) {
-                return interaction.update({ content: `❌ Je n'ai pas la permission de te donner le rôle.`, components: [] });
+                return interaction.update({ content: "❌ Je n'ai pas la permission de te donner le rôle.", components: [] });
             }
         } else {
             const failEmbed = new EmbedBuilder()
                 .setColor('#f23f42')
-                .setDescription(`❌ **Perdu !** Tu as cliqué sur un carré rouge. Clique à nouveau sur le bouton "J'accepte le règlement" pour réessayer.`);
+                .setDescription("❌ **Perdu !** Tu as cliqué sur un carré rouge. Clique à nouveau sur le bouton du règlement pour réessayer.");
             return interaction.update({ embeds: [failEmbed], components: [] });
         }
     }
