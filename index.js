@@ -20,47 +20,19 @@ let config = {
     channelId: '',
     roleId: '',
     messageContent: 'Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.',
-    customStatusText: 'Version 6.14.1',
-    activityType: 'Playing',            
-    activityText: 'Veiller sur le serveur' 
+    statusType: 'Playing',            
+    statusText: 'Veiller sur le serveur' 
 };
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Fonction pour mettre à jour les statuts du bot
+// Fonction pour mettre à jour le statut du bot
 function updateBotStatus() {
     if (!client.user) return;
-
-    const activities = [];
-
-    // 1. On ajoute l'activité (Joue à, Regarde, etc.) EN PREMIER
-    if (config.activityText && config.activityText.trim() !== '') {
-        const typeMap = {
-            'Playing': ActivityType.Playing,
-            'Watching': ActivityType.Watching,
-            'Listening': ActivityType.Listening,
-            'Competing': ActivityType.Competing
-        };
-        activities.push({
-            type: typeMap[config.activityType] || ActivityType.Playing,
-            name: config.activityText
-        });
-    }
-
-    // 2. On ajoute la bulle (Statut Personnalisé) EN DEUXIÈME
-    if (config.customStatusText && config.customStatusText.trim() !== '') {
-        activities.push({
-            type: ActivityType.Custom,
-            name: 'Custom Status', // L'API de Discord exige ce nom exact
-            state: config.customStatusText 
-        });
-    }
-
-    console.log('Activités envoyées à Discord :', JSON.stringify(activities, null, 2));
-
-    // On applique les activités
-    client.user.setPresence({ activities: activities, status: 'online' });
+    const typeMap = { 'Playing': ActivityType.Playing, 'Watching': ActivityType.Watching, 'Listening': ActivityType.Listening, 'Competing': ActivityType.Competing };
+    const activityType = typeMap[config.statusType] || ActivityType.Playing;
+    client.user.setActivity(config.statusText, { type: activityType });
 }
 
 // ---------------------------------------------------------
@@ -86,11 +58,10 @@ app.get('/api/guild/:guildId/data', async (req, res) => {
 });
 
 app.post('/api/status', (req, res) => {
-    config.customStatusText = req.body.customStatusText;
-    config.activityType = req.body.activityType;
-    config.activityText = req.body.activityText;
+    config.statusType = req.body.statusType;
+    config.statusText = req.body.statusText;
     updateBotStatus();
-    res.json({ success: true, message: 'Statuts du bot mis à jour !' });
+    res.json({ success: true, message: 'Statut du bot mis à jour !' });
 });
 
 app.get('/', (req, res) => {
@@ -123,7 +94,6 @@ app.get('/', (req, res) => {
             .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
             .row { display: flex; gap: 15px; }
             .row .form-group { flex: 1; }
-            .separator { border-top: 1px solid #1e1f22; margin: 20px 0; padding-top: 10px; }
         </style>
     </head>
     <body>
@@ -167,34 +137,25 @@ app.get('/', (req, res) => {
             </div>
 
             <div class="container">
-                <h2>🎮 Statuts du Bot</h2>
+                <h2>🎮 Activité du Bot</h2>
                 <div id="statusAlert" class="alert"></div>
                 <form id="statusForm">
-                    <div class="form-group">
-                        <label for="activityType">Activité (Joue à, Regarde...)</label>
-                        <div class="row">
-                            <div class="form-group">
-                                <select id="activityType" name="activityType">
-                                    <option value="Playing" ${config.activityType === 'Playing' ? 'selected' : ''}>Joue à</option>
-                                    <option value="Watching" ${config.activityType === 'Watching' ? 'selected' : ''}>Regarde</option>
-                                    <option value="Listening" ${config.activityType === 'Listening' ? 'selected' : ''}>Écoute</option>
-                                    <option value="Competing" ${config.activityType === 'Competing' ? 'selected' : ''}>Participe à</option>
-                                </select>
-                            </div>
-                            <div class="form-group" style="flex: 2;">
-                                <input type="text" id="activityText" name="activityText" value="${config.activityText}">
-                            </div>
+                    <div class="row">
+                        <div class="form-group">
+                            <label for="statusType">Type</label>
+                            <select id="statusType" name="statusType">
+                                <option value="Playing" ${config.statusType === 'Playing' ? 'selected' : ''}>Joue à</option>
+                                <option value="Watching" ${config.statusType === 'Watching' ? 'selected' : ''}>Regarde</option>
+                                <option value="Listening" ${config.statusType === 'Listening' ? 'selected' : ''}>Écoute</option>
+                                <option value="Competing" ${config.statusType === 'Competing' ? 'selected' : ''}>Participe à</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 2;">
+                            <label for="statusText">Texte</label>
+                            <input type="text" id="statusText" name="statusText" value="${config.statusText}" required>
                         </div>
                     </div>
-
-                    <div class="separator"></div>
-
-                    <div class="form-group">
-                        <label for="customStatusText">Statut Personnalisé (La bulle)</label>
-                        <input type="text" id="customStatusText" name="customStatusText" value="${config.customStatusText}">
-                    </div>
-
-                    <button type="submit" id="statusBtn" style="background: #2dc770;">✅ Mettre à jour les statuts</button>
+                    <button type="submit" id="statusBtn" style="background: #2dc770;">✅ Mettre à jour le statut</button>
                 </form>
             </div>
         </div>
@@ -293,7 +254,7 @@ app.get('/', (req, res) => {
                 }
 
                 statusBtn.disabled = false;
-                statusBtn.innerText = '✅ Mettre à jour les statuts';
+                statusBtn.innerText = '✅ Mettre à jour le statut';
             });
 
             loadGuilds();
@@ -366,6 +327,7 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
+    // 1. Commande /version
     if (interaction.isChatInputCommand() && interaction.commandName === 'version') {
         const versionEmbed = new EmbedBuilder()
             .setColor(0x2b2d31) 
@@ -373,23 +335,81 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ embeds: [versionEmbed] });
     }
 
+    // 2. Bouton "J'accepte le règlement" -> Déclenche le Captcha Visuel
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
-            if (!role) {
-                return interaction.reply({ content: 'Erreur : Le rôle est introuvable. Contactez un admin.', ephemeral: true });
-            }
+            if (!role) return interaction.reply({ content: 'Erreur : Rôle introuvable.', ephemeral: true });
 
-            const member = await interaction.guild.members.fetch(interaction.user.id);
+            const member = interaction.member;
             if (member.roles.cache.has(role.id)) {
                 return interaction.reply({ content: 'Tu as déjà accepté le règlement !', ephemeral: true });
             }
 
-            await member.roles.add(role);
-            await interaction.reply({ content: 'Merci ! Tu as accepté le règlement et reçu ton rôle. 🎉', ephemeral: true });
+            // Génération de la grille de 9 carrés (3 lignes de 3 boutons)
+            const greenIndex = Math.floor(Math.random() * 9); // Position du carré vert (0 à 8)
+            const rows = [];
+            let btnIndex = 0;
+
+            for (let r = 0; r < 3; r++) {
+                const row = new ActionRowBuilder();
+                for (let c = 0; c < 3; c++) {
+                    if (btnIndex === greenIndex) {
+                        row.addComponents(
+                            new ButtonBuilder()
+                                .setCustomId('captcha_ok')
+                                .setEmoji('🟩')
+                                .setStyle(ButtonStyle.Secondary)
+                        );
+                    } else {
+                        row.addComponents(
+                            new ButtonBuilder()
+                                .setCustomId('captcha_no')
+                                .setEmoji('🟥')
+                                .setStyle(ButtonStyle.Secondary)
+                        );
+                    }
+                    btnIndex++;
+                }
+                rows.push(row);
+            }
+
+            const captchaEmbed = new EmbedBuilder()
+                .setTitle('🤖 Vérification Anti-Bot')
+                .setDescription(`Pour valider ton accès au serveur, prouve que tu es humain.\n### **Clique sur le carré VERT 🟩**`)
+                .setColor(0xFFA500)
+                .setFooter({ text: 'Si tu te trompes, tu devras recommencer.' });
+
+            return interaction.reply({ embeds: [captchaEmbed], components: rows, ephemeral: true });
+
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: 'Une erreur est survenue lors de l\'attribution du rôle.', ephemeral: true });
+            await interaction.reply({ content: 'Une erreur est survenue.', ephemeral: true });
+        }
+    }
+
+    // 3. Gestion des clics sur le Captcha
+    if (interaction.isButton() && (interaction.customId === 'captcha_ok' || interaction.customId === 'captcha_no')) {
+        const isCorrect = interaction.customId === 'captcha_ok';
+        const role = await interaction.guild.roles.fetch(config.roleId);
+
+        if (!role) return interaction.update({ content: 'Erreur : Le rôle est introuvable.', components: [] });
+
+        if (isCorrect) {
+            try {
+                await interaction.member.roles.add(role);
+                const successEmbed = new EmbedBuilder()
+                    .setColor(0x2dc770)
+                    .setDescription('✅ **Vérification réussie !** Tu as prouvé que tu n'es pas un robot. Tu as maintenant accès au serveur. 🎉');
+                return interaction.update({ embeds: [successEmbed], components: [] });
+            } catch (err) {
+                return interaction.update({ content: '❌ Je n\'ai pas la permission de te donner le rôle.', components: [] });
+            }
+        } else {
+            const failEmbed = new EmbedBuilder()
+                .setColor(0xf23f42)
+                .setDescription('❌ **Perdu !** Tu as cliqué sur un carré rouge. Clique à nouveau sur le bouton "J'accepte le règlement" pour réessayer.');
+            return interaction.update({ embeds: [failEmbed], components: [] });
         }
     }
 });
