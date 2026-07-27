@@ -156,50 +156,214 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Dashboard Bot</title>
+        <title>Vigi-Access Dashboard</title>
         <style>
-            * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-            body { background-color: #313338; color: #dbdee1; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }
-            .container { background: #2b2d31; border-radius: 12px; padding: 32px; width: 100%; max-width: 650px; box-shadow: 0 8px 16px rgba(0,0,0,0.3); margin-bottom: 20px; }
-            h1 { color: #ffffff; margin-top: 0; font-size: 28px; border-bottom: 1px solid #1e1f22; padding-bottom: 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
-            h2 { color: #ffffff; font-size: 20px; margin-top: 0; margin-bottom: 20px; }
-            .form-group { margin-bottom: 20px; }
-            label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #b5bac1; letter-spacing: 0.5px; }
-            select, input[type="text"], input[type="number"], textarea { width: 100%; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; padding: 12px; color: #dbdee1; font-size: 16px; outline: none; transition: border-color 0.2s; }
-            select:focus, input:focus, textarea:focus { border-color: #5865F2; }
-            textarea { resize: vertical; min-height: 100px; }
-            button { background: #5865F2; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; transition: background 0.2s; }
-            button:hover { background: #4752c4; }
-            button:disabled { background: #4e5058; cursor: not-allowed; }
-            button.secondary { background: #2b2d31; border: 1px solid #1e1f22; margin-top: 10px; }
-            button.secondary:hover { background: #1e1f22; }
-            .status { display: inline-block; padding: 4px 10px; border-radius: 4px; background: #2dc770; color: #fff; font-size: 14px; font-weight: 600; margin-bottom: 20px; }
-            .version { float: right; font-size: 14px; color: #b5bac1; font-weight: 500; }
-            .alert { padding: 12px; border-radius: 8px; margin-top: 20px; font-weight: 600; display: none; }
-            .alert.success { background: #1e3a29; color: #2dc770; border: 1px solid #2dc770; }
-            .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
-            .row { display: flex; gap: 15px; }
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+            
+            * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+            
+            body {
+                background: radial-gradient(circle at 0% 0%, #1a1c20 0%, #0e0f12 100%);
+                color: #e6e8eb;
+                margin: 0;
+                padding: 50px 20px;
+                display: flex;
+                justify-content: center;
+                min-height: 100vh;
+            }
+
+            /* Custom Scrollbar */
+            ::-webkit-scrollbar { width: 8px; }
+            ::-webkit-scrollbar-track { background: #1e1f22; }
+            ::-webkit-scrollbar-thumb { background: #5865F2; border-radius: 4px; }
+
+            .wrapper { width: 100%; max-width: 800px; }
+
+            .glass-card {
+                background: rgba(35, 37, 42, 0.6);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 24px;
+                padding: 40px;
+                box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+                margin-bottom: 32px;
+                transition: transform 0.3s ease, box-shadow 0.3s ease;
+            }
+            
+            .glass-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+                border: 1px solid rgba(88, 101, 242, 0.2);
+            }
+
+            h1 {
+                font-size: 32px;
+                font-weight: 800;
+                margin: 0 0 20px 0;
+                background: linear-gradient(90deg, #ffffff, #b5bac1);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                border-bottom: 1px solid rgba(255,255,255,0.05);
+                padding-bottom: 20px;
+            }
+            
+            h2 {
+                font-size: 20px;
+                font-weight: 600;
+                margin: 0 0 24px 0;
+                color: #ffffff;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            .status-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 16px;
+                background: rgba(45, 199, 112, 0.1);
+                border: 1px solid rgba(45, 199, 112, 0.3);
+                border-radius: 50px;
+                color: #2dc770;
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 30px;
+                width: fit-content;
+            }
+            .status-badge.offline { background: rgba(242, 63, 66, 0.1); border-color: rgba(242, 63, 66, 0.3); color: #f23f42; }
+            .status-dot { width: 8px; height: 8px; background: #2dc770; border-radius: 50%; box-shadow: 0 0 10px #2dc770; }
+            .status-badge.offline .status-dot { background: #f23f42; box-shadow: 0 0 10px #f23f42; }
+
+            .form-group { margin-bottom: 24px; }
+            
+            label {
+                display: block;
+                margin-bottom: 10px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+                color: #80848e;
+                letter-spacing: 0.5px;
+            }
+
+            select, input[type="text"], input[type="number"], textarea {
+                width: 100%;
+                background: rgba(14, 15, 18, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 12px;
+                padding: 14px 16px;
+                color: #e6e8eb;
+                font-size: 15px;
+                outline: none;
+                transition: all 0.2s;
+            }
+
+            select:focus, input:focus, textarea:focus {
+                border-color: #5865F2;
+                box-shadow: 0 0 0 4px rgba(88, 101, 242, 0.1);
+            }
+            
+            textarea { resize: vertical; min-height: 120px; font-family: 'Inter', sans-serif; }
+
+            .btn {
+                border: none;
+                padding: 16px 24px;
+                border-radius: 12px;
+                font-size: 15px;
+                font-weight: 700;
+                cursor: pointer;
+                width: 100%;
+                transition: all 0.3s;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+            }
+            .btn-primary { background: linear-gradient(135deg, #5865F2, #4752c4); color: white; box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3); }
+            .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88, 101, 242, 0.4); }
+            
+            .btn-success { background: linear-gradient(135deg, #2dc770, #26a85f); color: white; box-shadow: 0 4px 15px rgba(45, 199, 112, 0.3); }
+            .btn-success:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(45, 199, 112, 0.4); }
+            
+            .btn-gold { background: linear-gradient(135deg, #FFD700, #FFB800); color: black; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3); }
+            .btn-gold:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255, 215, 0, 0.4); }
+
+            .btn-pink { background: linear-gradient(135deg, #EB459E, #d63384); color: white; box-shadow: 0 4px 15px rgba(235, 69, 158, 0.3); }
+            .btn-pink:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(235, 69, 158, 0.4); }
+
+            .btn-secondary { background: rgba(255, 255, 255, 0.05); color: #e6e8eb; border: 1px solid rgba(255, 255, 255, 0.1); margin-top: 12px; }
+            .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); }
+
+            .alert { padding: 16px; border-radius: 12px; margin-bottom: 20px; font-weight: 600; display: none; align-items: center; gap: 10px; animation: slideIn 0.3s ease; }
+            .alert.success { background: rgba(45, 199, 112, 0.1); color: #2dc770; border: 1px solid rgba(45, 199, 112, 0.2); }
+            .alert.error { background: rgba(242, 63, 66, 0.1); color: #f23f42; border: 1px solid rgba(242, 63, 66, 0.2); }
+            
+            @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+            .row { display: flex; gap: 20px; }
             .row .form-group { flex: 1; }
-            select[multiple] { height: 120px; }
-            .link-btn { display: block; text-align: center; background: #2b2d31; color: #5865F2; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 20px; border: 1px solid #1e1f22; }
-            .toggle-container { display: flex; align-items: center; gap: 12px; margin-top: 15px; background: #1e1f22; padding: 15px; border-radius: 8px; }
-            .toggle-container label { margin: 0; cursor: pointer; }
-            .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+
+            select[multiple] { height: 140px; padding: 12px; }
+
+            .link-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 30px; }
+            .link-card {
+                background: rgba(14, 15, 18, 0.8);
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                border-radius: 16px;
+                padding: 24px;
+                text-decoration: none;
+                color: #e6e8eb;
+                text-align: center;
+                font-weight: 600;
+                transition: all 0.3s;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            .link-card:hover { border-color: #5865F2; transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+            .link-icon { font-size: 24px; }
+
+            .toggle-container { display: flex; align-items: center; justify-content: space-between; background: rgba(14, 15, 18, 0.8); padding: 16px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); margin-top: 20px; margin-bottom: 20px; }
+            .toggle-label { font-size: 14px; font-weight: 600; color: #e6e8eb; }
+            .switch { position: relative; display: inline-block; width: 50px; height: 24px; flex-shrink: 0; }
             .switch input { opacity: 0; width: 0; height: 0; }
             .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4e5058; transition: .4s; border-radius: 24px; }
             .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-            input:checked + .slider { background-color: #2dc770; }
+            input:checked + .slider { background-color: #2dc770; box-shadow: 0 0 10px rgba(45, 199, 112, 0.4); }
             input:checked + .slider:before { transform: translateX(26px); }
+            
+            .version-tag { font-size: 12px; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 20px; color: #b5bac1; font-weight: 600; }
         </style>
     </head>
     <body>
-        <div style="width: 100%; max-width: 650px;">
-            <div class="container">
-                <h1>🤖 Dashboard Bot <span class="version">v${pkg.version}</span></h1>
-                <div class="status">Statut : ${status}</div>
+        <div class="wrapper">
+            <div class="glass-card">
+                <h1>🤖 Vigi-Access <span class="version-tag">v${pkg.version}</span></h1>
+                <div class="status-badge ${client.user ? '' : 'offline'}">
+                    <span class="status-dot"></span>
+                    Statut : ${status}
+                </div>
                 
-                <a href="/embed-builder" class="link-btn">📝 Ouvrir le Constructeur de Messages</a>
-                <a href="/economy-manager" class="link-btn">💰 Gérer l'Économie & Employés</a>
+                <div class="link-grid">
+                    <a href="/embed-builder" class="link-card">
+                        <span class="link-icon">📝</span>
+                        Constructeur de Messages
+                    </a>
+                    <a href="/economy-manager" class="link-card">
+                        <span class="link-icon">💰</span>
+                        Gérer l'Économie
+                    </a>
+                </div>
 
                 <div id="alertMsg" class="alert"></div>
 
@@ -236,13 +400,13 @@ app.get('/', (req, res) => {
                         <input type="text" id="messageId" name="messageId" value="${config.messageId}" placeholder="Se remplit automatiquement après l'envoi">
                     </div>
 
-                    <button type="submit" id="submitBtn">🚀 Envoyer le Règlement</button>
-                    <button type="button" id="editBtn" class="secondary">✏️ Modifier le message existant</button>
+                    <button type="submit" class="btn btn-primary">🚀 Envoyer le Règlement</button>
+                    <button type="button" id="editBtn" class="btn btn-secondary">✏️ Modifier le message existant</button>
                 </form>
             </div>
 
-            <div class="container">
-                <h2>📅 Configuration des Paies Automatiques</h2>
+            <div class="glass-card">
+                <h2>📅 Configuration des Paies</h2>
                 <div id="paydayAlert" class="alert"></div>
                 <form id="paydayForm">
                     <div class="row">
@@ -259,25 +423,25 @@ app.get('/', (req, res) => {
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="paydayHour">Heure de la paie (0-23)</label>
+                            <label for="paydayHour">Heure (0-23)</label>
                             <input type="number" id="paydayHour" name="paydayHour" min="0" max="23" value="${config.paydayHour}" required>
                         </div>
                     </div>
 
                     <div class="toggle-container">
+                        <span class="toggle-label">Activer la distribution automatique</span>
                         <label class="switch">
                             <input type="checkbox" id="paydayEnabled" name="paydayEnabled" ${config.paydayEnabled ? 'checked' : ''}>
                             <span class="slider"></span>
                         </label>
-                        <label for="paydayEnabled">Activer la distribution automatique des paies</label>
                     </div>
 
-                    <button type="submit" id="paydayBtn" style="background: #FFD700; color: black; margin-top: 20px;">💰 Sauvegarder les paramètres de paie</button>
+                    <button type="submit" class="btn btn-gold">💰 Sauvegarder</button>
                 </form>
             </div>
 
-            <div class="container">
-                <h2>🎭 Générateur de Rôles à Réaction</h2>
+            <div class="glass-card">
+                <h2>🎭 Rôles à Réaction</h2>
                 <div id="rrAlert" class="alert"></div>
                 <form id="rrForm">
                     <div class="form-group">
@@ -293,14 +457,14 @@ app.get('/', (req, res) => {
                         <textarea id="rrDescription" name="rrDescription" rows="3">Clique sur les boutons ci-dessous pour obtenir ou retirer le rôle correspondant.</textarea>
                     </div>
                     <div class="form-group">
-                        <label for="rrRoles">Rôles à proposer (Maintiens Ctrl pour choisir plusieurs)</label>
+                        <label for="rrRoles">Rôles à proposer (Maintiens Ctrl)</label>
                         <select id="rrRoles" name="rrRoles" multiple disabled required></select>
                     </div>
-                    <button type="submit" id="rrBtn" style="background: #EB459E;">🎭 Envoyer le menu de rôles</button>
+                    <button type="submit" class="btn btn-pink">🎭 Envoyer le menu</button>
                 </form>
             </div>
 
-            <div class="container">
+            <div class="glass-card">
                 <h2>🎮 Activité du Bot</h2>
                 <div id="statusAlert" class="alert"></div>
                 <form id="statusForm">
@@ -319,7 +483,7 @@ app.get('/', (req, res) => {
                             <input type="text" id="statusText" name="statusText" value="${config.statusText}" required>
                         </div>
                     </div>
-                    <button type="submit" id="statusBtn" style="background: #2dc770;">✅ Mettre à jour le statut</button>
+                    <button type="submit" class="btn btn-success">✅ Mettre à jour</button>
                 </form>
             </div>
         </div>
@@ -415,15 +579,15 @@ app.get('/', (req, res) => {
                     });
                     const result = await res.json();
 
-                    alertMsg.style.display = 'block';
-                    alertMsg.className = result.success ? 'alert success' : 'alert error';
+                    alertMsg.style.display = 'flex';
+                    alertMsg.className = 'alert ' + (result.success ? 'success' : 'error');
                     alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
                     
                     if (result.success && result.messageId) {
                         messageInput.value = result.messageId;
                     }
                 } catch (err) {
-                    alertMsg.style.display = 'block';
+                    alertMsg.style.display = 'flex';
                     alertMsg.className = 'alert error';
                     alertMsg.innerText = '❌ Erreur réseau.';
                 }
@@ -452,11 +616,11 @@ app.get('/', (req, res) => {
                     });
                     const result = await res.json();
 
-                    alertMsg.style.display = 'block';
-                    alertMsg.className = result.success ? 'alert success' : 'alert error';
+                    alertMsg.style.display = 'flex';
+                    alertMsg.className = 'alert ' + (result.success ? 'success' : 'error');
                     alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
                 } catch (err) {
-                    alertMsg.style.display = 'block';
+                    alertMsg.style.display = 'flex';
                     alertMsg.className = 'alert error';
                     alertMsg.innerText = '❌ Erreur réseau.';
                 }
@@ -485,17 +649,17 @@ app.get('/', (req, res) => {
                     });
                     const result = await res.json();
 
-                    paydayAlert.style.display = 'block';
-                    paydayAlert.className = result.success ? 'alert success' : 'alert error';
+                    paydayAlert.style.display = 'flex';
+                    paydayAlert.className = 'alert ' + (result.success ? 'success' : 'error');
                     paydayAlert.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
                 } catch (err) {
-                    paydayAlert.style.display = 'block';
+                    paydayAlert.style.display = 'flex';
                     paydayAlert.className = 'alert error';
                     paydayAlert.innerText = '❌ Erreur réseau.';
                 }
 
                 paydayBtn.disabled = false;
-                paydayBtn.innerText = '💰 Sauvegarder les paramètres de paie';
+                paydayBtn.innerText = '💰 Sauvegarder';
             });
 
             rrForm.addEventListener('submit', async (e) => {
@@ -521,17 +685,17 @@ app.get('/', (req, res) => {
                     });
                     const result = await res.json();
 
-                    rrAlert.style.display = 'block';
-                    rrAlert.className = result.success ? 'alert success' : 'alert error';
+                    rrAlert.style.display = 'flex';
+                    rrAlert.className = 'alert ' + (result.success ? 'success' : 'error');
                     rrAlert.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
                 } catch (err) {
-                    rrAlert.style.display = 'block';
+                    rrAlert.style.display = 'flex';
                     rrAlert.className = 'alert error';
                     rrAlert.innerText = '❌ Erreur réseau.';
                 }
 
                 rrBtn.disabled = false;
-                rrBtn.innerText = '🎭 Envoyer le menu de rôles';
+                rrBtn.innerText = '🎭 Envoyer le menu';
             });
 
             statusForm.addEventListener('submit', async (e) => {
@@ -551,17 +715,17 @@ app.get('/', (req, res) => {
                     });
                     const result = await res.json();
 
-                    statusAlert.style.display = 'block';
-                    statusAlert.className = result.success ? 'alert success' : 'alert error';
+                    statusAlert.style.display = 'flex';
+                    statusAlert.className = 'alert ' + (result.success ? 'success' : 'error');
                     statusAlert.innerText = (result.success ? '✅ ' : '❌ ') + result.message;
                 } catch (err) {
-                    statusAlert.style.display = 'block';
+                    statusAlert.style.display = 'flex';
                     statusAlert.className = 'alert error';
                     statusAlert.innerText = '❌ Erreur réseau.';
                 }
 
                 statusBtn.disabled = false;
-                statusBtn.innerText = '✅ Mettre à jour le statut';
+                statusBtn.innerText = '✅ Mettre à jour';
             });
 
             loadGuilds();
@@ -730,13 +894,11 @@ client.once('ready', async () => {
 
                 await logChannel.send({ embeds: [startupEmbed] });
 
-                // NOUVEAU : Bilan de santé 30 secondes après le démarrage
                 setTimeout(async () => {
                     try {
                         const botLatency30s = Date.now() - client.readyTimestamp;
                         const apiLatency30s = Math.round(client.ws.ping);
 
-                        // Test actif de la connexion PostgreSQL
                         let pgStatus30s = '🔴 Déconnecté';
                         try {
                             await dbNova.query('SELECT 1');
@@ -745,7 +907,6 @@ client.once('ready', async () => {
                             pgStatus30s = '🔴 Erreur';
                         }
 
-                        // Test de l'état de MongoDB
                         const mongoStatus30s = mongoose.connection.readyState === 1 ? '🟢 Connecté' : '🔴 Erreur';
                         const globalStatus = (pgStatus30s.includes('🟢') && mongoStatus30s.includes('🟢')) ? '✅ Stable' : '⚠️ Instable';
 
@@ -766,7 +927,7 @@ client.once('ready', async () => {
                     } catch (e) {
                         console.error("Erreur lors du health check :", e);
                     }
-                }, 30000); // 30 000 ms = 30 secondes
+                }, 30000);
 
             }
         } catch (e) {
@@ -781,7 +942,6 @@ client.once('ready', async () => {
             .catch(err => console.error('Erreur de ping:', err));
     }, 4 * 60 * 1000);
 
-    // Tâche de fond pour les paies automatiques
     setInterval(async () => {
         if (!config.paydayEnabled) return;
 
