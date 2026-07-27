@@ -20,6 +20,7 @@ const client = new Client({
 // ---------------------------------------------------------
 // CONNEXIONS AUX BASES DE DONNÉES
 // ---------------------------------------------------------
+let isPgConnected = false;
 const dbNova = new PGClient({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -36,8 +37,12 @@ const EconomySchema = new mongoose.Schema({
 });
 const Economy = mongoose.model('Economy', EconomySchema);
 
-dbNova.connect().then(() => console.log("🟢 Connecté à la BDD de Nova-Bot (Employés) !")).catch(err => console.error("🔴 Erreur BDD Nova :", err));
+dbNova.connect().then(() => {
+    isPgConnected = true;
+    console.log("🟢 Connecté à la BDD de Nova-Bot (Employés) !");
+}).catch(err => console.error("🔴 Erreur BDD Nova :", err));
 
+// Configuration
 let config = {
     guildId: process.env.GUILD_ID || '',
     channelId: process.env.CHANNEL_ID || '',
@@ -46,7 +51,11 @@ let config = {
     messageId: '',
     messageContent: "Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.",
     statusType: 'Playing',            
-    statusText: 'Veiller sur le serveur' 
+    statusText: 'Veiller sur le serveur',
+    paydayDay: 5,
+    paydayHour: 18,
+    lastPaydayProcessed: null,
+    paydayEnabled: true // NOUVEAU : Interrupteur des paies
 };
 
 app.use(express.urlencoded({ extended: true }));
@@ -64,6 +73,44 @@ function updateBotStatus() {
     };
     const activityType = typeMap[config.statusType] || ActivityType.Playing;
     client.user.setActivity(config.statusText, { type: activityType });
+}
+
+// ---------------------------------------------------------
+// SYSTÈME DE PAIE AUTOMATIQUE
+// ---------------------------------------------------------
+async function processPayday() {
+    try {
+        console.log("💸 Lancement de la distribution des paies...");
+        const empRes = await dbNova.query("SELECT user_id, stage FROM employees WHERE status = 'active'");
+        let paidCount = 0;
+
+        for (const emp of empRes.rows) {
+            const salary = emp.stage === 'confirmed' ? 1000 : 500;
+            let userEco = await Economy.findOne({ userId: String(emp.user_id) });
+            if (userEco) {
+                userEco.balance += salary;
+                await userEco.save();
+            } else {
+                await Economy.create({ userId: String(emp.user_id), balance: salary, lastPayday: new Date() });
+            }
+            paidCount++;
+        }
+        console.log(`✅ Paies distribuées à ${paidCount} employés.`);
+        
+        if (config.logChannelId) {
+            const logChannel = await client.channels.fetch(config.logChannelId);
+            if (logChannel) {
+                const paydayEmbed = new EmbedBuilder()
+                    .setColor('#FFD700')
+                    .setTitle("💸 Distribution des Paies Automatiques")
+                    .setDescription(`Les paies ont été distribuées automatiquement à **${paidCount} employés**.`)
+                    .setTimestamp();
+                await logChannel.send({ embeds: [paydayEmbed] });
+            }
+        }
+    } catch (err) {
+        console.error("Erreur lors de la distribution des paies:", err);
+    }
 }
 
 // ---------------------------------------------------------
@@ -94,6 +141,13 @@ app.post('/api/status', (req, res) => {
     res.json({ success: true, message: "Statut du bot mis à jour !" });
 });
 
+app.post('/api/payday-config', (req, res) => {
+    config.paydayDay = parseInt(req.body.paydayDay);
+    config.paydayHour = parseInt(req.body.paydayHour);
+    config.paydayEnabled = req.body.paydayEnabled === true || req.body.paydayEnabled === 'true'; // NOUVEAU
+    res.json({ success: true, message: 'Configuration des paies enregistrée !' });
+});
+
 app.get('/', (req, res) => {
     const status = client.user ? '🟢 En ligne' : '🔴 Hors ligne';
     const html = `
@@ -111,7 +165,7 @@ app.get('/', (req, res) => {
             h2 { color: #ffffff; font-size: 20px; margin-top: 0; margin-bottom: 20px; }
             .form-group { margin-bottom: 20px; }
             label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #b5bac1; letter-spacing: 0.5px; }
-            select, input[type="text"], textarea { width: 100%; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; padding: 12px; color: #dbdee1; font-size: 16px; outline: none; transition: border-color 0.2s; }
+            select, input[type="text"], input[type="number"], textarea { width: 100%; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; padding: 12px; color: #dbdee1; font-size: 16px; outline: none; transition: border-color 0.2s; }
             select:focus, input:focus, textarea:focus { border-color: #5865F2; }
             textarea { resize: vertical; min-height: 100px; }
             button { background: #5865F2; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; transition: background 0.2s; }
@@ -128,6 +182,15 @@ app.get('/', (req, res) => {
             .row .form-group { flex: 1; }
             select[multiple] { height: 120px; }
             .link-btn { display: block; text-align: center; background: #2b2d31; color: #5865F2; padding: 12px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 20px; border: 1px solid #1e1f22; }
+            /* Style de l'interrupteur */
+            .toggle-container { display: flex; align-items: center; gap: 12px; margin-top: 15px; background: #1e1f22; padding: 15px; border-radius: 8px; }
+            .toggle-container label { margin: 0; cursor: pointer; }
+            .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+            .switch input { opacity: 0; width: 0; height: 0; }
+            .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4e5058; transition: .4s; border-radius: 24px; }
+            .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+            input:checked + .slider { background-color: #2dc770; }
+            input:checked + .slider:before { transform: translateX(26px); }
         </style>
     </head>
     <body>
@@ -176,6 +239,43 @@ app.get('/', (req, res) => {
 
                     <button type="submit" id="submitBtn">🚀 Envoyer le Règlement</button>
                     <button type="button" id="editBtn" class="secondary">✏️ Modifier le message existant</button>
+                </form>
+            </div>
+
+            <!-- Configuration des Paies -->
+            <div class="container">
+                <h2>📅 Configuration des Paies Automatiques</h2>
+                <div id="paydayAlert" class="alert"></div>
+                <form id="paydayForm">
+                    <div class="row">
+                        <div class="form-group">
+                            <label for="paydayDay">Jour de la paie</label>
+                            <select id="paydayDay" name="paydayDay">
+                                <option value="0" ${config.paydayDay === 0 ? 'selected' : ''}>Dimanche</option>
+                                <option value="1" ${config.paydayDay === 1 ? 'selected' : ''}>Lundi</option>
+                                <option value="2" ${config.paydayDay === 2 ? 'selected' : ''}>Mardi</option>
+                                <option value="3" ${config.paydayDay === 3 ? 'selected' : ''}>Mercredi</option>
+                                <option value="4" ${config.paydayDay === 4 ? 'selected' : ''}>Jeudi</option>
+                                <option value="5" ${config.paydayDay === 5 ? 'selected' : ''}>Vendredi</option>
+                                <option value="6" ${config.paydayDay === 6 ? 'selected' : ''}>Samedi</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="paydayHour">Heure de la paie (0-23)</label>
+                            <input type="number" id="paydayHour" name="paydayHour" min="0" max="23" value="${config.paydayHour}" required>
+                        </div>
+                    </div>
+
+                    <!-- NOUVEAU : Interrupteur ON/OFF -->
+                    <div class="toggle-container">
+                        <label class="switch">
+                            <input type="checkbox" id="paydayEnabled" name="paydayEnabled" ${config.paydayEnabled ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                        <label for="paydayEnabled">Activer la distribution automatique des paies</label>
+                    </div>
+
+                    <button type="submit" id="paydayBtn" style="background: #FFD700; color: black; margin-top: 20px;">💰 Sauvegarder les paramètres de paie</button>
                 </form>
             </div>
 
@@ -237,6 +337,10 @@ app.get('/', (req, res) => {
             const submitBtn = document.getElementById('submitBtn');
             const editBtn = document.getElementById('editBtn');
             const messageInput = document.getElementById('messageId');
+
+            const paydayForm = document.getElementById('paydayForm');
+            const paydayBtn = document.getElementById('paydayBtn');
+            const paydayAlert = document.getElementById('paydayAlert');
 
             const rrForm = document.getElementById('rrForm');
             const rrChannelSelect = document.getElementById('rrChannelId');
@@ -362,6 +466,40 @@ app.get('/', (req, res) => {
 
                 editBtn.disabled = false;
                 editBtn.innerText = '✏️ Modifier le message existant';
+            });
+
+            // Soumission config paie
+            paydayForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                paydayBtn.disabled = true;
+                paydayBtn.innerText = 'Sauvegarde...';
+                paydayAlert.style.display = 'none';
+
+                const data = {
+                    paydayDay: document.getElementById('paydayDay').value,
+                    paydayHour: document.getElementById('paydayHour').value,
+                    paydayEnabled: document.getElementById('paydayEnabled').checked // NOUVEAU
+                };
+
+                try {
+                    const res = await fetch('/api/payday-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const result = await res.json();
+
+                    paydayAlert.style.display = 'block';
+                    paydayAlert.className = result.success ? 'alert success' : 'alert error';
+                    paydayAlert.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
+                } catch (err) {
+                    paydayAlert.style.display = 'block';
+                    paydayAlert.className = 'alert error';
+                    paydayAlert.innerText = '❌ Erreur réseau.';
+                }
+
+                paydayBtn.disabled = false;
+                paydayBtn.innerText = '💰 Sauvegarder les paramètres de paie';
             });
 
             rrForm.addEventListener('submit', async (e) => {
@@ -556,7 +694,6 @@ client.once('ready', async () => {
         const commands = [ 
             { name: 'version', description: 'Affiche la version du bot' },
             { name: 'ping', description: "Affiche la latence du bot et de l'API" },
-            { name: 'paye', description: 'Réclamer ta paye journalière en tant qu\'employé' },
             { name: 'solde', description: 'Affiche ton solde de Vigi-Coins' }
         ];
         client.guilds.cache.forEach(async (guild) => {
@@ -574,6 +711,11 @@ client.once('ready', async () => {
                 const botLatency = Date.now() - client.readyTimestamp;
                 const apiLatency = Math.round(client.ws.ping);
                 
+                const pgStatus = isPgConnected ? '🟢 Connecté' : '🔴 Erreur';
+                const mongoStatus = mongoose.connection.readyState === 1 ? '🟢 Connecté' : '🔴 Erreur';
+                const commandList = '`/version` • `/ping` • `/solde`';
+                const paydayStatus = config.paydayEnabled ? '✅ Active' : '🔴 Suspendue';
+                
                 const startupEmbed = new EmbedBuilder()
                     .setTitle("🟢 Bot Redémarré avec Succès")
                     .setColor('#2dc770')
@@ -582,9 +724,12 @@ client.once('ready', async () => {
                         { name: '🏷️ Version', value: '`' + pkg.version + '`', inline: true },
                         { name: '🌐 Latence Bot', value: '`' + botLatency + 'ms`', inline: true },
                         { name: "⚡ Latence API", value: '`' + apiLatency + 'ms`', inline: true },
-                        { name: '⚙️ Statut Commandes', value: 'Synchronisées et actives ✅', inline: false }
+                        { name: '🗄️ BDD Nova (PostgreSQL)', value: pgStatus, inline: true },
+                        { name: '💰 BDD Vigi (MongoDB)', value: mongoStatus, inline: true },
+                        { name: '💸 Système de Paie', value: paydayStatus, inline: true },
+                        { name: '⚙️ Commandes Synchronisées', value: commandList, inline: false }
                     )
-                    .setFooter({ text: "Protection active : OK | Captcha validation systeme OK" })
+                    .setFooter({ text: "Protection active : OK | Captcha validation systeme OK | Économie active" })
                     .setTimestamp();
 
                 await logChannel.send({ embeds: [startupEmbed] });
@@ -600,6 +745,23 @@ client.once('ready', async () => {
             .then(() => console.log('Ping de maintien en vie envoyé'))
             .catch(err => console.error('Erreur de ping:', err));
     }, 4 * 60 * 1000);
+
+    // Tâche de fond pour les paies automatiques
+    setInterval(async () => {
+        if (!config.paydayEnabled) return; // Si c'est coupé, on ne fait rien
+
+        const now = new Date();
+        const day = now.getDay(); 
+        const hour = now.getHours();
+
+        if (day === config.paydayDay && hour === config.paydayHour) {
+            const currentKey = `${day}-${hour}`;
+            if (config.lastPaydayProcessed !== currentKey) {
+                await processPayday();
+                config.lastPaydayProcessed = currentKey;
+            }
+        }
+    }, 60 * 1000); 
 });
 
 client.on('interactionCreate', async interaction => {
@@ -622,52 +784,6 @@ client.on('interactionCreate', async interaction => {
                 { name: "⚡ Latence de l'API", value: apiLatency + 'ms', inline: true }
             );
         return interaction.reply({ embeds: [pingEmbed], flags: MessageFlags.Ephemeral });
-    }
-
-    if (interaction.isChatInputCommand() && interaction.commandName === 'paye') {
-        const userId = interaction.user.id;
-
-        try {
-            const empRes = await dbNova.query("SELECT * FROM employees WHERE user_id = $1 AND status = 'active'", [userId]);
-            
-            if (empRes.rows.length === 0) {
-                return interaction.reply({ content: "Tu n'es pas un employé actif de l'entreprise !", flags: MessageFlags.Ephemeral });
-            }
-
-            const employee = empRes.rows[0];
-            
-            let userEco = await Economy.findOne({ userId: userId });
-
-            if (userEco && userEco.lastPayday) {
-                const lastPay = new Date(userEco.lastPayday).getTime();
-                const now = Date.now();
-                if (now - lastPay < 24 * 60 * 60 * 1000) {
-                    return interaction.reply({ content: "Tu as déjà réclamé ta paye aujourd'hui ! Reviens demain.", flags: MessageFlags.Ephemeral });
-                }
-            }
-
-            const salary = employee.stage === 'confirmed' ? 1000 : 500;
-
-            if (userEco) {
-                userEco.balance += salary;
-                userEco.lastPayday = new Date();
-                await userEco.save();
-            } else {
-                await Economy.create({ userId, balance: salary, lastPayday: new Date() });
-            }
-
-            const payEmbed = new EmbedBuilder()
-                .setColor('#2dc770')
-                .setTitle("💰 Paye journalière reçue !")
-                .setDescription("Félicitations ! Tu as reçu **" + salary + " Vigi-Coins**.\nMerci pour ton travail en tant que " + (employee.stage === 'confirmed' ? 'Titulaire' : 'En formation') + ".")
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [payEmbed] });
-
-        } catch (err) {
-            console.error(err);
-            return interaction.reply({ content: "Une erreur est survenue lors du paiement.", flags: MessageFlags.Ephemeral });
-        }
     }
 
     if (interaction.isChatInputCommand() && interaction.commandName === 'solde') {
