@@ -1,6 +1,5 @@
 const express = require('express');
 
-// On accepte le client Discord, la BDD Nova (PG) et le modèle Mongoose (Mongo)
 module.exports = function(client, dbNova, Economy) {
     const router = express.Router();
     router.use(express.json());
@@ -112,7 +111,7 @@ module.exports = function(client, dbNova, Economy) {
                     alertMsg.className = result.success ? 'alert success' : 'alert error';
                     alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
 
-                    if (result.success) loadEmployees(); // Rafraîchir la liste
+                    if (result.success) loadEmployees();
                 }
 
                 loadEmployees();
@@ -122,21 +121,18 @@ module.exports = function(client, dbNova, Economy) {
         res.send(html);
     });
 
-    // API : Récupérer les employés (PostgreSQL) + leur solde (MongoDB)
     router.get('/api/economy/employees', async (req, res) => {
         try {
-            // 1. On lit les employés dans PostgreSQL (Nova)
             const empRes = await dbNova.query("SELECT user_id, stage FROM employees WHERE status = 'active'");
             
-            // 2. On lit tous les soldes dans MongoDB (Vigi)
             const ecoDocs = await Economy.find({});
             const ecoMap = new Map();
             for (const doc of ecoDocs) {
                 ecoMap.set(String(doc.userId), doc.balance);
             }
 
-            // 3. On fusionne
-            const guild = client.guilds.cache.first();
+            const guildId = process.env.GUILD_ID;
+            const guild = client.guilds.cache.get(guildId);
             if (!guild) return res.json({ success: false, message: "Bot pas sur un serveur." });
 
             const enriched = [];
@@ -168,23 +164,19 @@ module.exports = function(client, dbNova, Economy) {
         }
     });
 
-    // API : Modifier le solde d'un utilisateur dans MongoDB
     router.post('/api/economy/manage', async (req, res) => {
         try {
             const { userId, amount } = req.body;
             const finalAmount = parseInt(amount);
             if (isNaN(finalAmount) || finalAmount === 0) return res.json({ success: false, message: "Montant invalide." });
 
-            // On cherche l'utilisateur dans MongoDB
             let userEco = await Economy.findOne({ userId: userId });
             
             if (userEco) {
-                // S'il existe, on met à jour son solde
                 userEco.balance += finalAmount;
-                if (userEco.balance < 0) userEco.balance = 0; // Empêcher un solde négatif
+                if (userEco.balance < 0) userEco.balance = 0;
                 await userEco.save();
             } else {
-                // S'il n'existe pas, on le crée
                 await Economy.create({ userId: userId, balance: finalAmount > 0 ? finalAmount : 0, lastPayday: null });
             }
 
