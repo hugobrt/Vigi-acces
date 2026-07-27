@@ -179,9 +179,11 @@ module.exports = function(client) {
             const files = [];
             // Si un fichier a été uploadé
             if (req.file) {
-                const attachment = new AttachmentBuilder(req.file.buffer, { name: req.file.originalname });
+                // On remplace les espaces et les caractères spéciaux par des underscores
+                const safeFileName = req.file.originalname.replace(/\s+/g, '_');
+                const attachment = new AttachmentBuilder(req.file.buffer, { name: safeFileName });
                 files.push(attachment);
-                embed.setImage('attachment://' + req.file.originalname);
+                embed.setImage('attachment://' + safeFileName);
             }
 
             await channel.send({ embeds: [embed], files });
