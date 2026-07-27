@@ -30,7 +30,12 @@ app.use(express.json());
 // Fonction pour mettre à jour le statut du bot
 function updateBotStatus() {
     if (!client.user) return;
-    const typeMap = { 'Playing': ActivityType.Playing, 'Watching': ActivityType.Watching, 'Listening': ActivityType.Listening, 'Competing': ActivityType.Competing };
+    const typeMap = { 
+        'Playing': ActivityType.Playing, 
+        'Watching': ActivityType.Watching, 
+        'Listening': ActivityType.Listening, 
+        'Competing': ActivityType.Competing 
+    };
     const activityType = typeMap[config.statusType] || ActivityType.Playing;
     client.user.setActivity(config.statusText, { type: activityType });
 }
@@ -51,8 +56,15 @@ app.get('/api/guild/:guildId/data', async (req, res) => {
     await guild.channels.fetch();
     await guild.roles.fetch();
 
-    const channels = guild.channels.cache.filter(c => c.type === 0).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
-    const roles = guild.roles.cache.filter(r => r.name !== '@everyone' && !r.managed).map(r => ({ id: r.id, name: r.name })).sort((a, b) => b.position - a.position);
+    const channels = guild.channels.cache
+        .filter(c => c.type === 0)
+        .map(c => ({ id: c.id, name: c.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    const roles = guild.roles.cache
+        .filter(r => r.name !== '@everyone' && !r.managed)
+        .map(r => ({ id: r.id, name: r.name }))
+        .sort((a, b) => b.position - a.position);
 
     res.json({ channels, roles });
 });
@@ -277,13 +289,13 @@ app.post('/setup', async (req, res) => {
         const embed = new EmbedBuilder()
             .setTitle('📜 Règlement du Serveur')
             .setDescription(config.messageContent)
-            .setColor(0x5865F2);
+            .setColor('#5865F2');
 
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId('accept_rules')
-                    .setLabel('✅ J\'accepte le règlement')
+                    .setLabel(`✅ J'accepte le règlement`)
                     .setStyle(ButtonStyle.Success)
             );
 
@@ -330,7 +342,7 @@ client.on('interactionCreate', async interaction => {
     // 1. Commande /version
     if (interaction.isChatInputCommand() && interaction.commandName === 'version') {
         const versionEmbed = new EmbedBuilder()
-            .setColor(0x2b2d31) 
+            .setColor('#2b2d31') 
             .setDescription(`**Version ${pkg.version}**`);
         return interaction.reply({ embeds: [versionEmbed] });
     }
@@ -339,11 +351,11 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
-            if (!role) return interaction.reply({ content: 'Erreur : Rôle introuvable.', ephemeral: true });
+            if (!role) return interaction.reply({ content: `Erreur : Rôle introuvable.`, ephemeral: true });
 
             const member = interaction.member;
             if (member.roles.cache.has(role.id)) {
-                return interaction.reply({ content: 'Tu as déjà accepté le règlement !', ephemeral: true });
+                return interaction.reply({ content: `Tu as déjà accepté le règlement !`, ephemeral: true });
             }
 
             // Génération de la grille de 9 carrés (3 lignes de 3 boutons)
@@ -375,40 +387,40 @@ client.on('interactionCreate', async interaction => {
             }
 
             const captchaEmbed = new EmbedBuilder()
-                .setTitle('🤖 Vérification Anti-Bot')
+                .setTitle(`🤖 Vérification Anti-Bot`)
                 .setDescription(`Pour valider ton accès au serveur, prouve que tu es humain.\n### **Clique sur le carré VERT 🟩**`)
-                .setColor(0xFFA500)
-                .setFooter({ text: 'Si tu te trompes, tu devras recommencer.' });
+                .setColor('#FFA500')
+                .setFooter({ text: `Si tu te trompes, tu devras recommencer.` });
 
             return interaction.reply({ embeds: [captchaEmbed], components: rows, ephemeral: true });
 
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: 'Une erreur est survenue.', ephemeral: true });
+            await interaction.reply({ content: `Une erreur est survenue.`, ephemeral: true });
         }
     }
 
     // 3. Gestion des clics sur le Captcha
-    if (interaction.isButton() && (interaction.customId === 'captcha_ok' || interaction.customId === 'captcha_no')) {
+    if (interaction.isButton() && interaction.customId.startsWith('captcha_')) {
         const isCorrect = interaction.customId === 'captcha_ok';
         const role = await interaction.guild.roles.fetch(config.roleId);
 
-        if (!role) return interaction.update({ content: 'Erreur : Le rôle est introuvable.', components: [] });
+        if (!role) return interaction.update({ content: `Erreur : Le rôle est introuvable.`, components: [] });
 
         if (isCorrect) {
             try {
                 await interaction.member.roles.add(role);
                 const successEmbed = new EmbedBuilder()
-                    .setColor(0x2dc770)
-                    .setDescription('✅ **Vérification réussie !** Tu as prouvé que tu n'es pas un robot. Tu as maintenant accès au serveur. 🎉');
+                    .setColor('#2dc770')
+                    .setDescription(`✅ **Vérification réussie !** Tu as prouvé que tu n'es pas un robot. Tu as maintenant accès au serveur. 🎉`);
                 return interaction.update({ embeds: [successEmbed], components: [] });
             } catch (err) {
-                return interaction.update({ content: '❌ Je n\'ai pas la permission de te donner le rôle.', components: [] });
+                return interaction.update({ content: `❌ Je n'ai pas la permission de te donner le rôle.`, components: [] });
             }
         } else {
             const failEmbed = new EmbedBuilder()
-                .setColor(0xf23f42)
-                .setDescription('❌ **Perdu !** Tu as cliqué sur un carré rouge. Clique à nouveau sur le bouton "J'accepte le règlement" pour réessayer.');
+                .setColor('#f23f42')
+                .setDescription(`❌ **Perdu !** Tu as cliqué sur un carré rouge. Clique à nouveau sur le bouton "J'accepte le règlement" pour réessayer.`);
             return interaction.update({ embeds: [failEmbed], components: [] });
         }
     }
