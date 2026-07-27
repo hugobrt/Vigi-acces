@@ -57,8 +57,8 @@ function updateBotStatus() {
         });
     }
 
-    // On applique les deux activités en même temps
-    client.user.setActivities(activities);
+    // On applique les activités via setPresence (méthode correcte pour discord.js v14)
+    client.user.setPresence({ activities: activities });
 }
 
 // ---------------------------------------------------------
