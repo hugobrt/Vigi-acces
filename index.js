@@ -4,8 +4,8 @@ const express = require('express');
 const pkg = require('./package.json'); 
 const embedBuilderRoute = require('./embedBuilder'); 
 const economyManagerRoute = require('./economyManager');
-const { Client: PGClient } = require('pg'); // Pour PostgreSQL (Nova)
-const mongoose = require('mongoose'); // Pour MongoDB (Vigi)
+const { Client: PGClient } = require('pg');
+const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,19 +20,15 @@ const client = new Client({
 // ---------------------------------------------------------
 // CONNEXIONS AUX BASES DE DONNÉES
 // ---------------------------------------------------------
-
-// 1. Base de données de NOVA (PostgreSQL - Lecture seule pour les employés)
 const dbNova = new PGClient({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// 2. Base de données de VIGI (MongoDB - Économie)
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log("🟢 Connecté à MongoDB (Vigi-Access Économie) !"))
     .catch(err => console.error("🔴 Erreur de connexion MongoDB :", err));
 
-// Modèle Mongoose pour l'économie
 const EconomySchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
     balance: { type: Number, default: 0 },
@@ -40,10 +36,8 @@ const EconomySchema = new mongoose.Schema({
 });
 const Economy = mongoose.model('Economy', EconomySchema);
 
-// Connexion à PostgreSQL
 dbNova.connect().then(() => console.log("🟢 Connecté à la BDD de Nova-Bot (Employés) !")).catch(err => console.error("🔴 Erreur BDD Nova :", err));
 
-// Configuration
 let config = {
     guildId: process.env.GUILD_ID || '',
     channelId: process.env.CHANNEL_ID || '',
@@ -58,7 +52,6 @@ let config = {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/', embedBuilderRoute(client));
-// On passe le client Discord, la BDD Nova (PG) et le modèle Économie (Mongo)
 app.use('/', economyManagerRoute(client, dbNova, Economy));
 
 function updateBotStatus() {
@@ -74,7 +67,7 @@ function updateBotStatus() {
 }
 
 // ---------------------------------------------------------
-// PARTIE WEB (Dashboard principal - Raccourci pour la lisibilité)
+// PARTIE WEB (Dashboard principal)
 // ---------------------------------------------------------
 app.get('/api/guilds', (req, res) => {
     const guilds = client.guilds.cache.map(g => ({ id: g.id, name: g.name }));
@@ -631,12 +624,10 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ embeds: [pingEmbed], flags: MessageFlags.Ephemeral });
     }
 
-    // Commande /paye (Lit Nova PG, Écrit dans Vigi Mongo)
     if (interaction.isChatInputCommand() && interaction.commandName === 'paye') {
         const userId = interaction.user.id;
 
         try {
-            // 1. Vigi lit la base PostgreSQL de NOVA
             const empRes = await dbNova.query("SELECT * FROM employees WHERE user_id = $1 AND status = 'active'", [userId]);
             
             if (empRes.rows.length === 0) {
@@ -645,7 +636,6 @@ client.on('interactionCreate', async interaction => {
 
             const employee = empRes.rows[0];
             
-            // 2. Vigi lit la base MongoDB de VIGI
             let userEco = await Economy.findOne({ userId: userId });
 
             if (userEco && userEco.lastPayday) {
@@ -658,7 +648,6 @@ client.on('interactionCreate', async interaction => {
 
             const salary = employee.stage === 'confirmed' ? 1000 : 500;
 
-            // 3. Vigi écrit dans la base MongoDB de VIGI
             if (userEco) {
                 userEco.balance += salary;
                 userEco.lastPayday = new Date();
@@ -681,7 +670,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // Commande /solde
     if (interaction.isChatInputCommand() && interaction.commandName === 'solde') {
         const userId = interaction.user.id;
         try {
@@ -700,7 +688,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // Gestion des Rôles à Réaction
     if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
         const roleId = interaction.customId.split('_')[1];
         try {
@@ -721,7 +708,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // Gestion du Règlement
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
