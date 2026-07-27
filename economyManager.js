@@ -28,8 +28,9 @@ module.exports = function(client, dbNova, Economy) {
                 .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
                 .badge.trainee { background: #f23f42; color: #fff; }
                 .badge.confirmed { background: #2dc770; color: #fff; }
-                .actions button { background: #5865F2; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 5px; }
+                .actions button { background: #5865F2; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 5px; margin-bottom: 5px; }
                 .actions button.remove { background: #f23f42; }
+                .actions button.bank { background: #FFD700; color: black; }
                 .alert { padding: 12px; border-radius: 8px; margin-top: 20px; font-weight: 600; display: none; }
                 .alert.success { background: #1e3a29; color: #2dc770; border: 1px solid #2dc770; }
                 .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
@@ -94,6 +95,7 @@ module.exports = function(client, dbNova, Economy) {
                         htmlContent += '<td class="actions">';
                         htmlContent += '<button onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'add\\')">➕ Prime</button>';
                         htmlContent += '<button class="remove" onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'remove\\')">➖ Amendes</button>';
+                        htmlContent += '<button class="bank" onclick="openBank(\\'' + emp.user_id + '\\', \\' + emp.username.replace(/'/g, "\\\\'") + '\\')">🏦 Banque</button>';
                         htmlContent += '</td>';
                         htmlContent += '</tr>';
                     }
@@ -118,6 +120,20 @@ module.exports = function(client, dbNova, Economy) {
                     alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
 
                     if (result.success) loadEmployees();
+                }
+
+                async function openBank(userId, username) {
+                    const res = await fetch('/api/economy/create-bank', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId })
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        alert("Compte bancaire de " + username + " :\n\nCode d'accès : " + result.code + "\n\nVous pouvez lui transmettre ce code pour qu'il accède à la banque.");
+                    } else {
+                        alert("Erreur : " + result.message);
+                    }
                 }
 
                 loadEmployees();
@@ -187,6 +203,31 @@ module.exports = function(client, dbNova, Economy) {
             }
 
             res.json({ success: true, message: "Solde mis à jour avec succès !" });
+        } catch (error) {
+            console.error(error);
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    // NOUVELLE API : Ouvrir un compte bancaire
+    router.post('/api/economy/create-bank', async (req, res) => {
+        try {
+            const { userId } = req.body;
+            let userEco = await Economy.findOne({ userId: String(userId) });
+            
+            if (userEco && userEco.bankCode) {
+                return res.json({ success: true, code: userEco.bankCode });
+            }
+            
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            if (userEco) {
+                userEco.bankCode = code;
+                await userEco.save();
+            } else {
+                await Economy.create({ userId: String(userId), balance: 0, bankCode: code });
+            }
+            
+            res.json({ success: true, code: code });
         } catch (error) {
             console.error(error);
             res.json({ success: false, message: error.message });
