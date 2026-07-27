@@ -19,6 +19,7 @@ let config = {
     guildId: '',
     channelId: '',
     roleId: '',
+    messageId: '', // NOUVEAU : Pour stocker l'ID du message à éditer
     messageContent: 'Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.',
     statusType: 'Playing',            
     statusText: 'Veiller sur le serveur' 
@@ -92,6 +93,8 @@ app.get('/', (req, res) => {
             button { background: #5865F2; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; width: 100%; transition: background 0.2s; }
             button:hover { background: #4752c4; }
             button:disabled { background: #4e5058; cursor: not-allowed; }
+            button.secondary { background: #2b2d31; border: 1px solid #1e1f22; margin-top: 10px; }
+            button.secondary:hover { background: #1e1f22; }
             .status { display: inline-block; padding: 4px 10px; border-radius: 4px; background: #2dc770; color: #fff; font-size: 14px; font-weight: 600; margin-bottom: 20px; }
             .version { float: right; font-size: 14px; color: #b5bac1; font-weight: 500; }
             .alert { padding: 12px; border-radius: 8px; margin-top: 20px; font-weight: 600; display: none; }
@@ -137,7 +140,15 @@ app.get('/', (req, res) => {
                         <textarea id="messageContent" name="messageContent" rows="5" required>${config.messageContent}</textarea>
                     </div>
 
+                    <!-- NOUVEAU : Champ pour l'ID du message (pour l'édition) -->
+                    <div class="form-group">
+                        <label for="messageId">ID du message (Pour l'éditer)</label>
+                        <input type="text" id="messageId" name="messageId" value="${config.messageId}" placeholder="Se remplit automatiquement après l'envoi">
+                    </div>
+
                     <button type="submit" id="submitBtn">🚀 Envoyer le Règlement</button>
+                    <!-- NOUVEAU : Bouton d'édition -->
+                    <button type="button" id="editBtn" class="secondary">✏️ Modifier le message existant</button>
                 </form>
             </div>
 
@@ -172,6 +183,8 @@ app.get('/', (req, res) => {
             const form = document.getElementById('configForm');
             const alertMsg = document.getElementById('alertMsg');
             const submitBtn = document.getElementById('submitBtn');
+            const editBtn = document.getElementById('editBtn'); // NOUVEAU
+            const messageInput = document.getElementById('messageId'); // NOUVEAU
 
             const statusForm = document.getElementById('statusForm');
             const statusBtn = document.getElementById('statusBtn');
@@ -202,6 +215,7 @@ app.get('/', (req, res) => {
                 roleSelect.disabled = false;
             });
 
+            // Envoi du formulaire (Envoyer le règlement)
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 submitBtn.disabled = true;
@@ -222,6 +236,11 @@ app.get('/', (req, res) => {
                     alertMsg.style.display = 'block';
                     alertMsg.className = result.success ? 'alert success' : 'alert error';
                     alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
+                    
+                    // NOUVEAU : Si l'envoi réussit, on met l'ID du message dans le champ
+                    if (result.success && result.messageId) {
+                        messageInput.value = result.messageId;
+                    }
                 } catch (err) {
                     alertMsg.style.display = 'block';
                     alertMsg.className = 'alert error';
@@ -230,6 +249,40 @@ app.get('/', (req, res) => {
 
                 submitBtn.disabled = false;
                 submitBtn.innerText = '🚀 Envoyer le Règlement';
+            });
+
+            // NOUVEAU : Bouton Modifier
+            editBtn.addEventListener('click', async () => {
+                editBtn.disabled = true;
+                editBtn.innerText = 'Édition en cours...';
+                alertMsg.style.display = 'none';
+
+                const data = {
+                    guildId: guildSelect.value,
+                    channelId: channelSelect.value,
+                    messageId: messageInput.value,
+                    messageContent: document.getElementById('messageContent').value
+                };
+
+                try {
+                    const res = await fetch('/edit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    const result = await res.json();
+
+                    alertMsg.style.display = 'block';
+                    alertMsg.className = result.success ? 'alert success' : 'alert error';
+                    alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
+                } catch (err) {
+                    alertMsg.style.display = 'block';
+                    alertMsg.className = 'alert error';
+                    alertMsg.innerText = '❌ Erreur réseau.';
+                }
+
+                editBtn.disabled = false;
+                editBtn.innerText = '✏️ Modifier le message existant';
             });
 
             statusForm.addEventListener('submit', async (e) => {
@@ -269,6 +322,7 @@ app.get('/', (req, res) => {
     res.send(html);
 });
 
+// Route pour envoyer le message
 app.post('/setup', async (req, res) => {
     try {
         config.guildId = req.body.guildId;
@@ -292,8 +346,36 @@ app.post('/setup', async (req, res) => {
                     .setStyle(ButtonStyle.Success)
             );
 
-        await channel.send({ embeds: [embed], components: [row] });
-        res.json({ success: true, message: 'Le règlement a été envoyé dans le salon !' });
+        const sentMessage = await channel.send({ embeds: [embed], components: [row] });
+        config.messageId = sentMessage.id; // Le bot sauvegarde l'ID du message
+        
+        res.json({ success: true, message: 'Le règlement a été envoyé dans le salon !', messageId: sentMessage.id });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: error.message });
+    }
+});
+
+// NOUVEAU : Route pour éditer le message
+app.post('/edit', async (req, res) => {
+    try {
+        const { guildId, channelId, messageId, messageContent } = req.body;
+        config.messageContent = messageContent;
+        config.messageId = messageId;
+
+        const channel = await client.channels.fetch(channelId);
+        if (!channel) return res.json({ success: false, message: 'Salon introuvable.' });
+
+        const message = await channel.messages.fetch(messageId);
+        if (!message) return res.json({ success: false, message: 'Message introuvable. Il a peut-être été supprimé.' });
+
+        const embed = new EmbedBuilder()
+            .setTitle('📜 Règlement du Serveur')
+            .setDescription(config.messageContent)
+            .setColor('#5865F2');
+
+        await message.edit({ embeds: [embed] });
+        res.json({ success: true, message: 'Le règlement a été modifié à distance avec succès !' });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
@@ -313,11 +395,15 @@ client.once('ready', async () => {
     updateBotStatus();
 
     try {
-        const commands = [ { name: 'version', description: 'Affiche la version du bot' } ];
+        // NOUVEAU : Ajout de la commande /ping
+        const commands = [ 
+            { name: 'version', description: 'Affiche la version du bot' },
+            { name: 'ping', description: 'Affiche la latence du bot et de l\\'API' } 
+        ];
         client.guilds.cache.forEach(async (guild) => {
             await client.application.commands.set(commands, guild.id);
         });
-        console.log('Commande /version enregistrée !');
+        console.log('Commandes slash enregistrées !');
     } catch (err) {
         console.error("Impossible d'enregistrer les commandes slash :", err);
     }
@@ -340,7 +426,22 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ embeds: [versionEmbed], flags: MessageFlags.Ephemeral });
     }
 
-    // 2. Bouton "J'accepte le règlement" -> Déclenche le Captcha Visuel
+    // NOUVEAU : 2. Commande /ping
+    if (interaction.isChatInputCommand() && interaction.commandName === 'ping') {
+        const botLatency = Date.now() - interaction.createdTimestamp;
+        const apiLatency = Math.round(client.ws.ping);
+        
+        const pingEmbed = new EmbedBuilder()
+            .setTitle('🏓 Pong !')
+            .setColor('#5865F2')
+            .addFields(
+                { name: '🌐 Latence du Bot', value: `${botLatency}ms`, inline: true },
+                { name: '⚡ Latence de l\\'API', value: `${apiLatency}ms`, inline: true }
+            );
+        return interaction.reply({ embeds: [pingEmbed], flags: MessageFlags.Ephemeral });
+    }
+
+    // 3. Bouton "J'accepte le règlement" -> Déclenche le Captcha Visuel
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
@@ -351,8 +452,7 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: `Tu as déjà accepté le règlement !`, flags: MessageFlags.Ephemeral });
             }
 
-            // Génération de la grille de 9 carrés (3 lignes de 3 boutons)
-            const greenIndex = Math.floor(Math.random() * 9); // Position du carré vert (0 à 8)
+            const greenIndex = Math.floor(Math.random() * 9);
             const rows = [];
             let btnIndex = 0;
 
@@ -367,7 +467,6 @@ client.on('interactionCreate', async interaction => {
                                 .setStyle(ButtonStyle.Secondary)
                         );
                     } else {
-                        // Chaque bouton rouge a un ID unique pour éviter le crash Discord
                         row.addComponents(
                             new ButtonBuilder()
                                 .setCustomId(`captcha_no_${btnIndex}`)
@@ -394,7 +493,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3. Gestion des clics sur le Captcha
+    // 4. Gestion des clics sur le Captcha
     if (interaction.isButton() && interaction.customId.startsWith('captcha_')) {
         const isCorrect = interaction.customId === 'captcha_ok';
         const role = await interaction.guild.roles.fetch(config.roleId);
