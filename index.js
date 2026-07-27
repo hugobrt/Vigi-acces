@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType } = require('discord.js');
 const express = require('express');
+const pkg = require('./package.json'); 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,8 +20,8 @@ let config = {
     channelId: '',
     roleId: '',
     messageContent: 'Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.',
-    statusType: 'Playing', // Par défaut: Joue à
-    statusText: 'Veiller sur le serveur' // Par défaut: Veiller sur le serveur
+    statusType: 'Custom', // Par défaut: Statut personnalisé
+    statusText: 'Version 6.14.1' // Par défaut: Le texte de ta bulle
 };
 
 app.use(express.urlencoded({ extended: true }));
@@ -33,9 +34,10 @@ function updateBotStatus() {
             'Playing': ActivityType.Playing,
             'Watching': ActivityType.Watching,
             'Listening': ActivityType.Listening,
-            'Competing': ActivityType.Competing
+            'Competing': ActivityType.Competing,
+            'Custom': ActivityType.Custom // Le statut personnalisé (la bulle)
         };
-        const activityType = typeMap[config.statusType] || ActivityType.Playing;
+        const activityType = typeMap[config.statusType] || ActivityType.Custom;
         client.user.setActivity(config.statusText, { type: activityType });
     }
 }
@@ -56,20 +58,12 @@ app.get('/api/guild/:guildId/data', async (req, res) => {
     await guild.channels.fetch();
     await guild.roles.fetch();
 
-    const channels = guild.channels.cache
-        .filter(c => c.type === 0)
-        .map(c => ({ id: c.id, name: c.name }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    const roles = guild.roles.cache
-        .filter(r => r.name !== '@everyone' && !r.managed)
-        .map(r => ({ id: r.id, name: r.name }))
-        .sort((a, b) => b.position - a.position);
+    const channels = guild.channels.cache.filter(c => c.type === 0).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
+    const roles = guild.roles.cache.filter(r => r.name !== '@everyone' && !r.managed).map(r => ({ id: r.id, name: r.name })).sort((a, b) => b.position - a.position);
 
     res.json({ channels, roles });
 });
 
-// Route pour mettre à jour le statut
 app.post('/api/status', (req, res) => {
     config.statusType = req.body.statusType;
     config.statusText = req.body.statusText;
@@ -77,7 +71,6 @@ app.post('/api/status', (req, res) => {
     res.json({ success: true, message: 'Statut du bot mis à jour !' });
 });
 
-// Route principale (Interface Web)
 app.get('/', (req, res) => {
     const status = client.user ? '🟢 En ligne' : '🔴 Hors ligne';
     const html = `
@@ -102,6 +95,7 @@ app.get('/', (req, res) => {
             button:hover { background: #4752c4; }
             button:disabled { background: #4e5058; cursor: not-allowed; }
             .status { display: inline-block; padding: 4px 10px; border-radius: 4px; background: #2dc770; color: #fff; font-size: 14px; font-weight: 600; margin-bottom: 20px; }
+            .version { float: right; font-size: 14px; color: #b5bac1; font-weight: 500; }
             .alert { padding: 12px; border-radius: 8px; margin-top: 20px; font-weight: 600; display: none; }
             .alert.success { background: #1e3a29; color: #2dc770; border: 1px solid #2dc770; }
             .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
@@ -112,7 +106,7 @@ app.get('/', (req, res) => {
     <body>
         <div style="width: 100%; max-width: 650px;">
             <div class="container">
-                <h1>🤖 Dashboard Bot</h1>
+                <h1>🤖 Dashboard Bot <span class="version">v${pkg.version}</span></h1>
                 <div class="status">Statut : ${status}</div>
                 
                 <div id="alertMsg" class="alert"></div>
@@ -157,6 +151,7 @@ app.get('/', (req, res) => {
                         <div class="form-group">
                             <label for="statusType">Type</label>
                             <select id="statusType" name="statusType">
+                                <option value="Custom" ${config.statusType === 'Custom' ? 'selected' : ''}>Statut Personnalisé (Bulle)</option>
                                 <option value="Playing" ${config.statusType === 'Playing' ? 'selected' : ''}>Joue à</option>
                                 <option value="Watching" ${config.statusType === 'Watching' ? 'selected' : ''}>Regarde</option>
                                 <option value="Listening" ${config.statusType === 'Listening' ? 'selected' : ''}>Écoute</option>
@@ -316,9 +311,25 @@ app.listen(PORT, () => {
 // PARTIE BOT DISCORD
 // ---------------------------------------------------------
 
-client.once('ready', () => {
+client.once('ready', async () => {
     console.log(`Bot connecté en tant que ${client.user.tag}`);
-    updateBotStatus(); // Applique le statut au démarrage
+    updateBotStatus(); // Applique la bulle personnalisée au démarrage
+
+    // Enregistrement de la commande /version
+    try {
+        const commands = [
+            {
+                name: 'version',
+                description: 'Affiche la version du bot'
+            }
+        ];
+        client.guilds.cache.forEach(async (guild) => {
+            await client.application.commands.set(commands, guild.id);
+        });
+        console.log('Commande /version enregistrée !');
+    } catch (err) {
+        console.error("Impossible d'enregistrer les commandes slash :", err);
+    }
     
     // Système Anti-Sleep pour Render
     const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
@@ -330,9 +341,16 @@ client.once('ready', () => {
 });
 
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isButton()) return;
+    // Gestion de la commande /version
+    if (interaction.isChatInputCommand() && interaction.commandName === 'version') {
+        const versionEmbed = new EmbedBuilder()
+            .setColor(0x2b2d31) 
+            .setDescription(`**Version ${pkg.version}**`);
+        return interaction.reply({ embeds: [versionEmbed] });
+    }
 
-    if (interaction.customId === 'accept_rules') {
+    // Gestion du clic sur le bouton
+    if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
             if (!role) {
