@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType, MessageFlags } = require('discord.js');
 const express = require('express');
 const pkg = require('./package.json'); 
 
@@ -27,7 +27,7 @@ let config = {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Fonction pour mettre à jour le statut du bot
+// Fonction pour mettre à jour le statut
 function updateBotStatus() {
     if (!client.user) return;
     const typeMap = { 
@@ -56,15 +56,8 @@ app.get('/api/guild/:guildId/data', async (req, res) => {
     await guild.channels.fetch();
     await guild.roles.fetch();
 
-    const channels = guild.channels.cache
-        .filter(c => c.type === 0)
-        .map(c => ({ id: c.id, name: c.name }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-    const roles = guild.roles.cache
-        .filter(r => r.name !== '@everyone' && !r.managed)
-        .map(r => ({ id: r.id, name: r.name }))
-        .sort((a, b) => b.position - a.position);
+    const channels = guild.channels.cache.filter(c => c.type === 0).map(c => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
+    const roles = guild.roles.cache.filter(r => r.name !== '@everyone' && !r.managed).map(r => ({ id: r.id, name: r.name })).sort((a, b) => b.position - a.position);
 
     res.json({ channels, roles });
 });
@@ -344,18 +337,18 @@ client.on('interactionCreate', async interaction => {
         const versionEmbed = new EmbedBuilder()
             .setColor('#2b2d31') 
             .setDescription(`**Version ${pkg.version}**`);
-        return interaction.reply({ embeds: [versionEmbed] });
+        return interaction.reply({ embeds: [versionEmbed], flags: MessageFlags.Ephemeral });
     }
 
     // 2. Bouton "J'accepte le règlement" -> Déclenche le Captcha Visuel
     if (interaction.isButton() && interaction.customId === 'accept_rules') {
         try {
             const role = await interaction.guild.roles.fetch(config.roleId);
-            if (!role) return interaction.reply({ content: `Erreur : Rôle introuvable.`, ephemeral: true });
+            if (!role) return interaction.reply({ content: `Erreur : Rôle introuvable.`, flags: MessageFlags.Ephemeral });
 
             const member = interaction.member;
             if (member.roles.cache.has(role.id)) {
-                return interaction.reply({ content: `Tu as déjà accepté le règlement !`, ephemeral: true });
+                return interaction.reply({ content: `Tu as déjà accepté le règlement !`, flags: MessageFlags.Ephemeral });
             }
 
             // Génération de la grille de 9 carrés (3 lignes de 3 boutons)
@@ -374,9 +367,10 @@ client.on('interactionCreate', async interaction => {
                                 .setStyle(ButtonStyle.Secondary)
                         );
                     } else {
+                        // Chaque bouton rouge a un ID unique pour éviter le crash Discord
                         row.addComponents(
                             new ButtonBuilder()
-                                .setCustomId('captcha_no')
+                                .setCustomId(`captcha_no_${btnIndex}`)
                                 .setEmoji('🟥')
                                 .setStyle(ButtonStyle.Secondary)
                         );
@@ -392,11 +386,11 @@ client.on('interactionCreate', async interaction => {
                 .setColor('#FFA500')
                 .setFooter({ text: `Si tu te trompes, tu devras recommencer.` });
 
-            return interaction.reply({ embeds: [captchaEmbed], components: rows, ephemeral: true });
+            return interaction.reply({ embeds: [captchaEmbed], components: rows, flags: MessageFlags.Ephemeral });
 
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: `Une erreur est survenue.`, ephemeral: true });
+            await interaction.reply({ content: `Une erreur est survenue.`, flags: MessageFlags.Ephemeral });
         }
     }
 
