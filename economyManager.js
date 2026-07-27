@@ -76,22 +76,28 @@ module.exports = function(client, dbNova, Economy) {
                         return;
                     }
 
-                    empBody.innerHTML = data.employees.map(emp => `
-                        <tr>
-                            <td>
-                                <div class="user-info">
-                                    ${emp.avatar ? '<img src="' + emp.avatar + '">' : ''}
-                                    <span>${emp.username}</span>
-                                </div>
-                            </td>
-                            <td><span class="badge ${emp.stage === 'confirmed' ? 'confirmed' : 'trainee'}">${emp.stage === 'confirmed' ? 'Titulaire' : 'En formation'}</span></td>
-                            <td><strong>${emp.balance} 🪙</strong></td>
-                            <td class="actions">
-                                <button onclick="modifyBalance('${emp.user_id}', 'add')">➕ Prime</button>
-                                <button class="remove" onclick="modifyBalance('${emp.user_id}', 'remove')">➖ Amendes</button>
-                            </td>
-                        </tr>
-                    `).join('');
+                    let htmlContent = '';
+                    for (const emp of data.employees) {
+                        htmlContent += '<tr>';
+                        htmlContent += '<td><div class="user-info">';
+                        if (emp.avatar) {
+                            htmlContent += '<img src="' + emp.avatar + '">';
+                        }
+                        htmlContent += '<span>' + emp.username + '</span></div></td>';
+                        
+                        const stageClass = emp.stage === 'confirmed' ? 'confirmed' : 'trainee';
+                        const stageText = emp.stage === 'confirmed' ? 'Titulaire' : 'En formation';
+                        htmlContent += '<td><span class="badge ' + stageClass + '">' + stageText + '</span></td>';
+                        
+                        htmlContent += '<td><strong>' + emp.balance + ' 🪙</strong></td>';
+                        
+                        htmlContent += '<td class="actions">';
+                        htmlContent += '<button onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'add\\')">➕ Prime</button>';
+                        htmlContent += '<button class="remove" onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'remove\\')">➖ Amendes</button>';
+                        htmlContent += '</td>';
+                        htmlContent += '</tr>';
+                    }
+                    empBody.innerHTML = htmlContent;
                 }
 
                 async function modifyBalance(userId, action) {
@@ -103,7 +109,7 @@ module.exports = function(client, dbNova, Economy) {
                     const res = await fetch('/api/economy/manage', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId, amount: action === 'add' ? amount : -amount })
+                        body: JSON.stringify({ userId: userId, amount: action === 'add' ? amount : -amount })
                     });
                     const result = await res.json();
 
