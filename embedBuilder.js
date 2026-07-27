@@ -1,13 +1,11 @@
 const express = require('express');
 const { EmbedBuilder } = require('discord.js');
 
-// On exporte une fonction qui prend le client Discord en paramètre
 module.exports = function(client) {
     const router = express.Router();
     router.use(express.json());
     router.use(express.urlencoded({ extended: true }));
 
-    // Page principale du constructeur
     router.get('/embed-builder', (req, res) => {
         const html = `
         <!DOCTYPE html>
@@ -15,7 +13,7 @@ module.exports = function(client) {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Constructeur d'Embeds</title>
+            <title>Constructeur de Messages</title>
             <style>
                 * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
                 body { background-color: #313338; color: #dbdee1; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }
@@ -35,18 +33,12 @@ module.exports = function(client) {
                 .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
                 .row { display: flex; gap: 15px; }
                 .row .form-group { flex: 1; }
-                /* Aperçu style Discord */
-                .embed-preview { background: #2b2d31; border-left: 4px solid #5865F2; border-radius: 4px; padding: 16px; margin-top: 20px; display: none; }
-                .embed-title { color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 8px; }
-                .embed-desc { color: #dbdee1; font-size: 14px; line-height: 1.4; }
-                .embed-footer { color: #b5bac1; font-size: 12px; margin-top: 12px; }
-                .embed-img { max-width: 100%; border-radius: 4px; margin-top: 12px; }
             </style>
         </head>
         <body>
             <div class="container">
                 <a href="/" class="back-link">← Retour au Dashboard</a>
-                <h1>📝 Constructeur d'Embeds</h1>
+                <h1>📝 Constructeur de Messages</h1>
                 
                 <div id="alertMsg" class="alert"></div>
 
@@ -90,15 +82,8 @@ module.exports = function(client) {
                         <input type="url" id="imageUrl" placeholder="https://exemple.com/image.png">
                     </div>
 
-                    <button type="submit" id="submitBtn">🚀 Envoyer l'Embed</button>
+                    <button type="submit" id="submitBtn">🚀 Envoyer le message Embed</button>
                 </form>
-
-                <div class="embed-preview" id="preview">
-                    <div class="embed-title" id="p_title"></div>
-                    <div class="embed-desc" id="p_desc"></div>
-                    <img class="embed-img" id="p_img" src="">
-                    <div class="embed-footer" id="p_footer"></div>
-                </div>
             </div>
 
             <script>
@@ -127,7 +112,6 @@ module.exports = function(client) {
                     channelSelect.disabled = false;
                 });
 
-                // Logique d'envoi
                 form.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     submitBtn.disabled = true;
@@ -161,7 +145,7 @@ module.exports = function(client) {
                     }
 
                     submitBtn.disabled = false;
-                    submitBtn.innerText = '🚀 Envoyer l'Embed';
+                    submitBtn.innerText = "🚀 Envoyer le message Embed";
                 });
 
                 loadGuilds();
@@ -171,7 +155,6 @@ module.exports = function(client) {
         res.send(html);
     });
 
-    // API pour envoyer l'embed
     router.post('/api/send-embed', async (req, res) => {
         try {
             const { channelId, title, description, color, footerText, imageUrl } = req.body;
@@ -187,7 +170,7 @@ module.exports = function(client) {
             if (imageUrl) embed.setImage(imageUrl);
 
             await channel.send({ embeds: [embed] });
-            res.json({ success: true, message: 'L\\'embed a été envoyé avec succès !' });
+            res.json({ success: true, message: "Le message embed a été envoyé avec succès !" });
         } catch (error) {
             console.error(error);
             res.json({ success: false, message: error.message });
