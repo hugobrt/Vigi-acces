@@ -6,7 +6,6 @@ const pkg = require('./package.json');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuration du Bot Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds, 
@@ -14,13 +13,14 @@ const client = new Client({
     ]
 });
 
-// Variables en mémoire
+// Configuration chargée depuis les variables d'environnement (permanentes sur Render)
 let config = {
-    guildId: '',
-    channelId: '',
-    roleId: '',
+    guildId: process.env.GUILD_ID || '',
+    channelId: process.env.CHANNEL_ID || '',
+    logChannelId: process.env.LOG_CHANNEL_ID || '',
+    roleId: process.env.ROLE_ID || '',
     messageId: '',
-    messageContent: 'Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.',
+    messageContent: "Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.",
     statusType: 'Playing',            
     statusText: 'Veiller sur le serveur' 
 };
@@ -28,7 +28,6 @@ let config = {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Fonction pour mettre à jour le statut
 function updateBotStatus() {
     if (!client.user) return;
     const typeMap = { 
@@ -67,7 +66,7 @@ app.post('/api/status', (req, res) => {
     config.statusType = req.body.statusType;
     config.statusText = req.body.statusText;
     updateBotStatus();
-    res.json({ success: true, message: 'Statut du bot mis à jour !' });
+    res.json({ success: true, message: "Statut du bot mis à jour !" });
 });
 
 app.get('/', (req, res) => {
@@ -121,17 +120,17 @@ app.get('/', (req, res) => {
                     </div>
 
                     <div class="row">
-                        <div class="form-group">
+                        <div class="form-group" style="flex: 2;">
                             <label for="channelId">Salon du Règlement</label>
-                            <select id="channelId" name="channelId" required disabled>
-                                <option value="">-</option>
-                            </select>
+                            <select id="channelId" name="channelId" required disabled><option value="">-</option></select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" style="flex: 2;">
+                            <label for="logChannelId">Salon des Logs</label>
+                            <select id="logChannelId" name="logChannelId" disabled><option value="">-</option></select>
+                        </div>
+                        <div class="form-group" style="flex: 2;">
                             <label for="roleId">Rôle à donner</label>
-                            <select id="roleId" name="roleId" required disabled>
-                                <option value="">-</option>
-                            </select>
+                            <select id="roleId" name="roleId" required disabled><option value="">-</option></select>
                         </div>
                     </div>
 
@@ -177,6 +176,7 @@ app.get('/', (req, res) => {
         <script>
             const guildSelect = document.getElementById('guildId');
             const channelSelect = document.getElementById('channelId');
+            const logChannelSelect = document.getElementById('logChannelId');
             const roleSelect = document.getElementById('roleId');
             const form = document.getElementById('configForm');
             const alertMsg = document.getElementById('alertMsg');
@@ -193,14 +193,21 @@ app.get('/', (req, res) => {
                 const guilds = await res.json();
                 guildSelect.innerHTML = '<option value="">-- Choisir un serveur --</option>' + 
                     guilds.map(g => '<option value="' + g.id + '">' + g.name + '</option>').join('');
+                
+                if ("${config.guildId}") {
+                    guildSelect.value = "${config.guildId}";
+                    guildSelect.dispatchEvent(new Event('change'));
+                }
             }
 
             guildSelect.addEventListener('change', async (e) => {
                 const guildId = e.target.value;
                 channelSelect.disabled = true;
                 roleSelect.disabled = true;
+                logChannelSelect.disabled = true;
                 channelSelect.innerHTML = '<option>Chargement...</option>';
                 roleSelect.innerHTML = '<option>Chargement...</option>';
+                logChannelSelect.innerHTML = '<option>Chargement...</option>';
 
                 if (!guildId) return;
 
@@ -208,9 +215,16 @@ app.get('/', (req, res) => {
                 const data = await res.json();
 
                 channelSelect.innerHTML = data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
+                logChannelSelect.innerHTML = '<option value="">Aucun</option>' + data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
                 roleSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
+                
                 channelSelect.disabled = false;
                 roleSelect.disabled = false;
+                logChannelSelect.disabled = false;
+
+                if ("${config.channelId}") channelSelect.value = "${config.channelId}";
+                if ("${config.logChannelId}") logChannelSelect.value = "${config.logChannelId}";
+                if ("${config.roleId}") roleSelect.value = "${config.roleId}";
             });
 
             form.addEventListener('submit', async (e) => {
@@ -398,6 +412,34 @@ client.once('ready', async () => {
         console.log('Commandes slash enregistrées !');
     } catch (err) {
         console.error("Impossible d'enregistrer les commandes slash :", err);
+    }
+
+    // NOUVEAU : Message de démarrage dans le salon des logs
+    if (config.logChannelId) {
+        try {
+            const logChannel = await client.channels.fetch(config.logChannelId);
+            if (logChannel) {
+                const botLatency = Date.now() - client.readyTimestamp;
+                const apiLatency = Math.round(client.ws.ping);
+                
+                const startupEmbed = new EmbedBuilder()
+                    .setTitle("🟢 Bot Redémarré avec Succès")
+                    .setColor('#2dc770')
+                    .setDescription("Le bot est de nouveau en ligne et opérationnel !")
+                    .addFields(
+                        { name: '🏷️ Version', value: `\`${pkg.version}\``, inline: true },
+                        { name: '🌐 Latence Bot', value: `\`${botLatency}ms\``, inline: true },
+                        { name: "⚡ Latence API", value: `\`${apiLatency}ms\``, inline: true },
+                        { name: '⚙️ Statut Commandes', value: `Synchronisées et actives ✅`, inline: false }
+                    )
+                    .setFooter({ text: "Protection active : OK | Captcha validation systeme OK" })
+                    .setTimestamp();
+
+                await logChannel.send({ embeds: [startupEmbed] });
+            }
+        } catch (e) {
+            console.error("Impossible d'envoyer le message de log :", e);
+        }
     }
     
     const url = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
