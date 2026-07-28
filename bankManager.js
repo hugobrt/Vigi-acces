@@ -1,3 +1,175 @@
+const express = require('express');
+
+module.exports = function(client, dbNova, Economy) {
+    const router = express.Router();
+    router.use(express.json());
+    router.use(express.urlencoded({ extended: true }));
+
+    // Middleware pour protéger le dashboard
+    function requireLogin(req, res, next) {
+        if (req.session && req.session.bankUserId) {
+            next();
+        } else {
+            res.redirect('/bank/login');
+        }
+    }
+
+    // ----------------------------------------------------
+    // ROUTE 1 : PAGE DE CONNEXION
+    // ----------------------------------------------------
+    router.get('/bank/login', (req, res) => {
+        if (req.session && req.session.bankUserId) return res.redirect('/bank');
+
+        const html = `
+        <!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vigi-Banque — Connexion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#08090C; --surface:#11141A; --surface2:#181C24;
+    --border:#222732; --text:#F4F6F8; --muted:#6B7280;
+    --accent:#00E0B0; --accent-dim:rgba(0,224,176,0.1); --danger:#FF5C5C;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;height:100vh;}
+  h1,h2{font-family:'Space Grotesk',sans-serif;letter-spacing:-0.02em;}
+  a{color:inherit;text-decoration:none;}
+  
+  .login-wrap{min-height:100vh;display:grid;grid-template-columns:1fr 1fr;}
+  .login-visual{background:linear-gradient(135deg,#0B1F1A,#08090C);display:flex;flex-direction:column;justify-content:space-between;padding:48px;position:relative;overflow:hidden;}
+  .login-visual::after{content:'';position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(0,224,176,0.08),transparent 70%);top:-100px;right:-100px;}
+  .logo{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:700;font-size:20px;color:#fff;}
+  .logo svg{width:26px;height:26px;}
+  .visual-content{position:relative;z-index:1;}
+  .visual-content h2{font-size:32px;line-height:1.3;color:#fff;max-width:400px;margin-bottom:20px;}
+  .visual-content p{color:var(--muted);max-width:350px;line-height:1.6;}
+  
+  .login-form-side{display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg);}
+  .login-box{width:100%;max-width:360px;}
+  .login-box h1{font-size:28px;color:#fff;margin-bottom:8px;}
+  .login-box .sub{color:var(--muted);margin-bottom:32px;font-size:15px;}
+  .input-group{margin-bottom:20px;}
+  .input-group label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:500;}
+  .code-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;color:#fff;font-size:24px;text-align:center;letter-spacing:12px;font-family:'IBM Plex Mono';outline:none;transition:border .2s;}
+  .code-input:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);}
+  .btn-primary{width:100%;background:var(--accent);color:#000;font-weight:700;padding:16px;border-radius:12px;font-size:15px;cursor:pointer;border:none;transition:transform .15s,box-shadow .2s;}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 25px rgba(0,224,176,0.2);}
+  .login-error{color:var(--danger);font-size:13px;margin-top:15px;display:none;padding:12px;background:rgba(255,92,92,0.1);border:1px solid rgba(255,92,92,0.2);border-radius:10px;}
+
+  @media(max-width:900px){
+    .login-wrap{grid-template-columns:1fr;}
+    .login-visual{display:none;}
+  }
+</style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-visual">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16.5 7.4 20.7 12 22C16.6 20.7 20 16.5 20 11V5L12 2Z" fill="#00E0B0" fill-opacity="0.15" stroke="#00E0B0" stroke-width="1.5"/><circle cx="12" cy="11" r="3" stroke="#00E0B0" stroke-width="1.5"/></svg>
+        Vigi-Banque
+      </div>
+      <div class="visual-content">
+        <h2>L'écosystème financier de votre entreprise.</h2>
+        <p>Accédez à votre solde, vos revenus et gérez vos fonds en toute sécurité.</p>
+      </div>
+      <div style="font-size:12px;color:var(--muted);">© Vigi-Banque — Sécurisé par Vigi-Access</div>
+    </div>
+    
+    <div class="login-form-side">
+      <div class="login-box">
+        <h1>Connexion</h1>
+        <p class="sub">Entrez votre code à 6 chiffres.</p>
+        
+        <form id="loginForm">
+          <div class="input-group">
+            <label>Code d'accès</label>
+            <input type="text" id="codeInput" class="code-input" maxlength="6" placeholder="------" required>
+          </div>
+          <div id="loginError" class="login-error"></div>
+          <div style="margin-top:24px;">
+            <button type="submit" class="btn-primary">Accéder à mon compte</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('codeInput').value;
+      const errorDiv = document.getElementById('loginError');
+      
+      if (code.length !== 6) {
+        errorDiv.innerText = 'Le code doit comporter 6 chiffres.';
+        errorDiv.style.display = 'block';
+        return;
+      }
+
+      errorDiv.style.display = 'none';
+
+      try {
+        const res = await fetch('/bank/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          window.location.href = '/bank';
+        } else {
+          errorDiv.innerText = data.message || 'Code invalide.';
+          errorDiv.style.display = 'block';
+        }
+      } catch (err) {
+        errorDiv.innerText = 'Erreur réseau.';
+        errorDiv.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>`;
+        res.send(html);
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 2 : API DE CONNEXION (POST)
+    // ----------------------------------------------------
+    router.post('/bank/login', async (req, res) => {
+        try {
+            const { code } = req.body;
+            const userEco = await Economy.findOne({ bankCode: code });
+            
+            if (!userEco) {
+                return res.json({ success: false, message: 'Code d\'accès invalide.' });
+            }
+
+            req.session.bankUserId = userEco.userId;
+            res.json({ success: true });
+        } catch (error) {
+            console.error(error);
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 3 : API DE DÉCONNEXION
+    // ----------------------------------------------------
+    router.post('/bank/logout', (req, res) => {
+        req.session.destroy();
+        res.json({ success: true });
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 4 : API POUR RÉCUPÉRER LES DONNÉES (Protégée)
+    // ----------------------------------------------------
     router.get('/api/bank/data', requireLogin, async (req, res) => {
         try {
             const userId = req.session.bankUserId;
@@ -218,3 +390,6 @@
 </html>`;
         res.send(html);
     });
+
+    return router;
+};
