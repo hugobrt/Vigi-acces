@@ -1,11 +1,10 @@
 const express = require('express');
 
-module.exports = function(client, dbNova, Economy) {
+module.exports = function(client, dbNova, Economy, ShopItem) {
     const router = express.Router();
     router.use(express.json());
     router.use(express.urlencoded({ extended: true }));
 
-    // Middleware pour protéger le dashboard
     function requireLogin(req, res, next) {
         if (req.session && req.session.bankUserId) {
             next();
@@ -152,24 +151,11 @@ module.exports = function(client, dbNova, Economy) {
     router.post('/bank/login', async (req, res) => {
         try {
             const { identifier, code } = req.body;
-            
-            // On nettoie l'identifiant (minuscules, sans espaces) pour la comparaison
             const cleanIdentifier = identifier ? identifier.trim().toLowerCase() : null;
+            const userEco = await Economy.findOne({ bankIdentifier: cleanIdentifier, bankCode: code });
             
-            // On cherche un compte qui a EXACTEMENT cet identifiant ET ce code
-            const userEco = await Economy.findOne({ 
-                bankIdentifier: cleanIdentifier, 
-                bankCode: code 
-            });
-            
-            if (!userEco) {
-                return res.json({ success: false, message: 'Identifiant ou code d\'accès invalide.' });
-            }
-
-            // On vérifie si le compte n'est pas gelé
-            if (userEco.bankFrozen) {
-                return res.json({ success: false, message: 'Votre compte est gelé. Contactez l\'administration.' });
-            }
+            if (!userEco) return res.json({ success: false, message: 'Identifiant ou code d\'accès invalide.' });
+            if (userEco.bankFrozen) return res.json({ success: false, message: 'Votre compte est gelé. Contactez l\'administration.' });
 
             req.session.bankUserId = userEco.userId;
             res.json({ success: true });
@@ -231,7 +217,45 @@ module.exports = function(client, dbNova, Economy) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 5 : DASHBOARD (Protégé par requireLogin)
+    // ROUTE 5 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
+    // ----------------------------------------------------
+    router.get('/api/shop/items', requireLogin, async (req, res) => {
+        try {
+            const items = await ShopItem.find({});
+            res.json({ success: true, items });
+        } catch (error) {
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 6 : API POUR ACHETER UN ARTICLE (Protégée)
+    // ----------------------------------------------------
+    router.post('/api/shop/purchase', requireLogin, async (req, res) => {
+        try {
+            const { itemId } = req.body;
+            const userId = req.session.bankUserId;
+            
+            const userEco = await Economy.findOne({ userId: String(userId) });
+            if (!userEco) return res.json({ success: false, message: "Compte introuvable." });
+            
+            const item = await ShopItem.findById(itemId);
+            if (!item) return res.json({ success: false, message: "Article introuvable." });
+            
+            if (userEco.balance < item.price) return res.json({ success: false, message: "Fonds insuffisants." });
+
+            userEco.balance -= item.price;
+            userEco.transactions.push({ amount: -item.price, label: `Achat Boutique: ${item.name}` });
+            await userEco.save();
+
+            res.json({ success: true, newBalance: userEco.balance, itemName: item.name });
+        } catch (error) {
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 7 : DASHBOARD (Protégé par requireLogin)
     // ----------------------------------------------------
     router.get('/bank', requireLogin, (req, res) => {
         const html = `
@@ -280,6 +304,18 @@ module.exports = function(client, dbNova, Economy) {
   .frozen-icon{font-size:80px;margin-bottom:20px;}
   .frozen-overlay h1{color:var(--danger);font-size:32px;margin-bottom:10px;}
   .frozen-overlay p{color:var(--muted);max-width:400px;line-height:1.6;}
+
+  /* PAYMENT OVERLAY (Apple Pay / ACS) */
+  .pay-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:2000;justify-content:center;align-items:center;flex-direction:column;text-align:center;}
+  .pay-card{width:300px;height:180px;background:linear-gradient(135deg,#1C1F26,#0d0f12);border-radius:16px;padding:20px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;transition:transform 0.5s ease, opacity 0.5s ease;}
+  .pay-card.tapped{transform:translateY(-20px) scale(0.95);opacity:0.5;}
+  .acs-box{display:none;background:#11141A;padding:40px;border-radius:20px;border:1px solid #222732;width:350px;text-align:center;}
+  .acs-spinner{border:4px solid rgba(0,224,176,0.2);border-top:4px solid var(--accent);border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:20px auto;}
+  @keyframes spin{100%{transform:rotate(360deg);}}
+  .acs-bar{height:4px;background:#222732;border-radius:2px;margin-top:20px;overflow:hidden;}
+  .acs-bar-fill{height:100%;width:0%;background:var(--accent);transition:width 2.5s linear;}
+  .success-box{display:none;}
+  .success-check{width:80px;height:80px;background:var(--accent);border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:40px;color:#000;font-weight:bold;}
 </style>
 </head>
 <body>
@@ -289,6 +325,36 @@ module.exports = function(client, dbNova, Economy) {
     <h1>Compte Gelé</h1>
     <p>Votre compte bancaire a été suspendu par l'administration. Vous n'avez plus accès à vos fonds pour le moment. Veuillez contacter un responsable pour plus d'informations.</p>
     <button onclick="logout()" style="margin-top:30px;background:var(--surface2);padding:12px 24px;border-radius:10px;font-weight:600;color:#fff;">Se déconnecter</button>
+  </div>
+
+  <!-- ÉCRAN DE PAIEMENT -->
+  <div class="pay-overlay" id="payOverlay">
+    <div class="pay-card" id="payCard">
+      <div style="display:flex;justify-content:space-between;"><div style="font-weight:700;font-size:14px;letter-spacing:1px;">VIGI · EMPLOYÉ</div><div style="width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;"></div></div>
+      <div class="mono" style="font-size:16px;letter-spacing:3px;color:#fff;">•••• •••• •••• 7734</div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#ccc;"><div id="payCardName">NOM</div><div style="color:#aaa;">12/26</div></div>
+    </div>
+    
+    <div class="acs-box" id="acsBox">
+      <h3 style="margin-top:0;font-size:18px;color:#fff;">Authentification de paiement</h3>
+      <div class="acs-spinner"></div>
+      <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Veuillez patienter pendant la vérification de votre paiement...</p>
+      <div class="acs-bar"><div class="acs-bar-fill" id="acsBarFill"></div></div>
+    </div>
+
+    <div class="success-box" id="successBox">
+      <div class="success-check">✔</div>
+      <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement validé</h3>
+      <p style="color:var(--muted);margin:10px 0;">Vous avez obtenu : <strong id="successItemName" style="color:var(--accent);"></strong></p>
+      <button onclick="closePayment()" style="margin-top:20px;background:var(--accent);color:#000;padding:12px 24px;border-radius:10px;font-weight:700;">Retour à la boutique</button>
+    </div>
+
+    <div class="success-box" id="failBox" style="display:none;">
+      <div class="success-check" style="background:var(--danger);">✖</div>
+      <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement refusé</h3>
+      <p style="color:var(--muted);margin:10px 0;" id="failReason">Fonds insuffisants.</p>
+      <button onclick="closePayment()" style="margin-top:20px;background:var(--surface2);padding:12px 24px;border-radius:10px;font-weight:600;color:#fff;">Retour à la boutique</button>
+    </div>
   </div>
 
   <div class="dash-wrap">
@@ -338,24 +404,16 @@ module.exports = function(client, dbNova, Economy) {
          <div class="topbar"><div><h1>Boutique Vigi</h1><div style="font-size:13px;color:var(--muted);margin-top:4px;">Dépensez vos Vigi-Coins</div></div></div>
          <div class="card">
             <h3 style="margin-bottom:8px;font-size:18px;">Articles disponibles</h3>
-            <p style="font-size:13px;color:var(--muted);margin-bottom:24px;">La boutique est en cours de développement.</p>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
-                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;">
-                    <div style="font-size:40px;margin-bottom:16px;">🎨</div><h3 style="font-size:18px;margin-bottom:8px;">Rôle Coloré</h3><p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Débloquez un rôle de couleur.</p><div style="display:inline-block;padding:6px 16px;background:var(--accent-dim);color:var(--accent);border-radius:20px;font-weight:700;font-family:'IBM Plex Mono';">500 🪙</div>
-                </div>
-                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;">
-                    <div style="font-size:40px;margin-bottom:16px;">🚗</div><h3 style="font-size:18px;margin-bottom:8px;">Véhicule VIP</h3><p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Accès à un véhicule exclusif.</p><div style="display:inline-block;padding:6px 16px;background:var(--accent-dim);color:var(--accent);border-radius:20px;font-weight:700;font-family:'IBM Plex Mono';">2000 🪙</div>
-                </div>
-                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;">
-                    <div style="font-size:40px;margin-bottom:16px;">🎟️</div><h3 style="font-size:18px;margin-bottom:8px;">Ticket Loterie</h3><p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Tentez de gagner le gros lot.</p><div style="display:inline-block;padding:6px 16px;background:var(--accent-dim);color:var(--accent);border-radius:20px;font-weight:700;font-family:'IBM Plex Mono';">100 🪙</div>
-                </div>
-            </div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:24px;">Cliquez sur un article pour l'acheter. Le paiement sera sécurisé par Vigi-Banque.</p>
+            <div id="shopGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;"></div>
          </div>
       </div>
     </main>
   </div>
 
   <script>
+    let userBalance = 0;
+
     function switchTab(t) {
       document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
       document.getElementById('tab-' + t).style.display = 'block';
@@ -370,12 +428,14 @@ module.exports = function(client, dbNova, Economy) {
           return;
         }
 
-        document.getElementById('dashBalance').innerText = data.balance.toLocaleString('fr-FR') + ' Vigi-Coins';
+        userBalance = data.balance;
+        document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
         const name = data.username || 'Employé';
         document.getElementById('greeting').innerText = 'Bonjour, ' + name + ' 👋';
         document.getElementById('sideName').innerText = name;
         document.getElementById('sideAvatar').innerText = name.charAt(0).toUpperCase();
         document.getElementById('vcName').innerText = name.toUpperCase();
+        document.getElementById('payCardName').innerText = name.toUpperCase();
         
         const planName = data.stage === 'confirmed' ? 'Titulaire' : (data.stage === 'trainee' ? 'En formation' : 'Non employé');
         document.getElementById('sidePlan').innerText = planName;
@@ -397,7 +457,85 @@ module.exports = function(client, dbNova, Economy) {
             }
             txList.innerHTML = h;
         }
+
+        loadShopItems();
       } else { window.location.href = '/bank/login'; }
+    }
+
+    async function loadShopItems() {
+        const res = await fetch('/api/shop/items');
+        const data = await res.json();
+        const grid = document.getElementById('shopGrid');
+        
+        if (!data.success || data.items.length === 0) {
+            grid.innerHTML = '<p style="color:var(--muted);grid-column:1/-1;text-align:center;">Aucun article en vente pour le moment.</p>';
+            return;
+        }
+
+        let h = '';
+        for (const item of data.items) {
+            h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;display:flex;flex-direction:column;align-items:center;">';
+            h += '<div style="font-size:40px;margin-bottom:16px;">' + item.icon + '</div>';
+            h += '<h3 style="font-size:18px;margin-bottom:8px;">' + item.name + '</h3>';
+            h += '<p style="font-size:13px;color:var(--muted);margin-bottom:20px;flex-grow:1;">' + item.description + '</p>';
+            h += '<div style="display:inline-block;padding:6px 16px;background:var(--accent-dim);color:var(--accent);border-radius:20px;font-weight:700;font-family:' + "'IBM Plex Mono'" + ';margin-bottom:16px;">' + item.price + ' 🪙</div>';
+            h += '<button onclick="buyItem(\\'' + item._id + '\\', \\' + item.name + '\\', ' + item.price + ')" style="width:100%;background:var(--accent);color:#000;border:none;padding:12px;border-radius:10px;font-weight:700;cursor:pointer;">Acheter</button>';
+            h += '</div>';
+        }
+        grid.innerHTML = h;
+    }
+
+    async function buyItem(itemId, itemName, price) {
+        // Afficher l'overlay
+        document.getElementById('payOverlay').style.display = 'flex';
+        document.getElementById('payCard').style.display = 'flex';
+        document.getElementById('payCard').classList.add('tapped');
+        document.getElementById('acsBox').style.display = 'none';
+        document.getElementById('successBox').style.display = 'none';
+        document.getElementById('failBox').style.display = 'none';
+        document.getElementById('acsBarFill').style.width = '0%';
+
+        // Attendre 1s (effet carte tap)
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Afficher ACS
+        document.getElementById('payCard').style.display = 'none';
+        document.getElementById('acsBox').style.display = 'block';
+        
+        // Lancer la barre de progression
+        setTimeout(() => {
+            document.getElementById('acsBarFill').style.width = '100%';
+        }, 100);
+
+        // Appeler l'API pendant que la barre se remplit
+        const resPromise = fetch('/api/shop/purchase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemId })
+        });
+
+        // Attendre la fin de l'animation (2.5s)
+        await new Promise(r => setTimeout(r, 2600));
+        const res = await resPromise;
+        const data = await res.json();
+
+        document.getElementById('acsBox').style.display = 'none';
+
+        if (data.success) {
+            userBalance = data.newBalance;
+            document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
+            document.getElementById('successItemName').innerText = data.itemName;
+            document.getElementById('successBox').style.display = 'block';
+            // Rafraîchir les transactions
+            loadData();
+        } else {
+            document.getElementById('failReason').innerText = data.message || "Une erreur est survenue.";
+            document.getElementById('failBox').style.display = 'block';
+        }
+    }
+
+    function closePayment() {
+        document.getElementById('payOverlay').style.display = 'none';
     }
 
     async function logout() {
