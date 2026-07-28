@@ -478,14 +478,14 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             h += '<div style="font-size:40px;margin-bottom:16px;">' + item.icon + '</div>';
             h += '<h3 style="font-size:18px;margin-bottom:8px;">' + item.name + '</h3>';
             h += '<p style="font-size:13px;color:var(--muted);margin-bottom:20px;flex-grow:1;">' + item.description + '</p>';
-            h += '<div style="display:inline-block;padding:6px 16px;background:var(--accent-dim);color:var(--accent);border-radius:20px;font-weight:700;font-family:' + "'IBM Plex Mono'" + ';margin-bottom:16px;">' + item.price + ' 🪙</div>';
-            h += '<button onclick="buyItem(\\'' + item._id + '\\', \\' + item.name + '\\', ' + item.price + ')" style="width:100%;background:var(--accent);color:#000;border:none;padding:12px;border-radius:10px;font-weight:700;cursor:pointer;">Acheter</button>';
+            h += '<div style="display:inline-block;padding:6px 16px;background:var(--accent-dim);color:var(--accent);border-radius:20px;font-weight:700;font-family:IBM Plex Mono,monospace;margin-bottom:16px;">' + item.price + ' 🪙</div>';
+            h += '<button onclick="buyItem(\\'' + item._id + '\\')" style="width:100%;background:var(--accent);color:#000;border:none;padding:12px;border-radius:10px;font-weight:700;cursor:pointer;">Acheter</button>';
             h += '</div>';
         }
         grid.innerHTML = h;
     }
 
-    async function buyItem(itemId, itemName, price) {
+    async function buyItem(itemId) {
         // Afficher l'overlay
         document.getElementById('payOverlay').style.display = 'flex';
         document.getElementById('payCard').style.display = 'flex';
