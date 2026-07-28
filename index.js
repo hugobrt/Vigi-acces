@@ -40,11 +40,14 @@ mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log("🟢 Connecté à MongoDB (Vigi-Access Économie) !"))
     .catch(err => console.error("🔴 Erreur de connexion MongoDB :", err));
 
+// Base de données Vigi (Économie, Banque, Transactions)
 const EconomySchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
     balance: { type: Number, default: 0 },
     lastPayday: { type: Date, default: null },
     bankCode: { type: String, default: null },
+    bankIdentifier: { type: String, default: null },
+    bankFrozen: { type: Boolean, default: false },
     transactions: [{
         amount: Number,
         label: String,
