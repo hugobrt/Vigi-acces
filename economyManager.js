@@ -1,6 +1,6 @@
 const express = require('express');
 
-module.exports = function(client, dbNova, Economy) {
+module.exports = function(client, dbNova, Economy, ShopItem) {
     const router = express.Router();
     router.use(express.json());
     router.use(express.urlencoded({ extended: true }));
@@ -57,11 +57,12 @@ module.exports = function(client, dbNova, Economy) {
         <body>
             <div class="glass-card">
                 <a href="/" class="back-link">← Retour au Dashboard</a>
-                <h1>💰 Gestion Financière & Bancaire</h1>
+                <h1>💰 Gestion Financière & Boutique</h1>
                 
                 <div class="tabs">
                     <button class="tab-btn active" onclick="switchTab('empTab', this)">Employés & Solde</button>
                     <button class="tab-btn" onclick="switchTab('bankTab', this)">Comptes Bancaires</button>
+                    <button class="tab-btn" onclick="switchTab('shopTab', this)">Boutique</button>
                 </div>
 
                 <!-- ONGLET EMPLOYÉS -->
@@ -110,9 +111,47 @@ module.exports = function(client, dbNova, Economy) {
                         <tbody id="bankBody"><tr><td colspan="5">Chargement...</td></tr></tbody>
                     </table>
                 </div>
+
+                <!-- ONGLET BOUTIQUE -->
+                <div id="shopTab" class="tab-content">
+                    <div id="shopAlert" class="alert"></div>
+                    <h2>Créer un article</h2>
+                    <div style="display: grid; grid-template-columns: 1fr 2fr 1fr auto; gap: 15px; margin-bottom: 30px; align-items: end;">
+                        <div>
+                            <label style="font-size: 12px; color: #80848e; font-weight: 600; text-transform: uppercase;">Icône</label>
+                            <input type="text" id="shopIcon" placeholder="🎨" style="width: 100%; padding: 12px; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; color: #fff; font-size: 15px; text-align: center;">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #80848e; font-weight: 600; text-transform: uppercase;">Nom de l'article</label>
+                            <input type="text" id="shopName" placeholder="Rôle Coloré" style="width: 100%; padding: 12px; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; color: #fff; font-size: 15px;">
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #80848e; font-weight: 600; text-transform: uppercase;">Prix (Vigi-Coins)</label>
+                            <input type="number" id="shopPrice" placeholder="500" style="width: 100%; padding: 12px; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; color: #fff; font-size: 15px;">
+                        </div>
+                        <button class="btn btn-green" onclick="createShopItem()" style="height: 47px;">Ajouter</button>
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; color: #80848e; font-weight: 600; text-transform: uppercase;">Description</label>
+                        <input type="text" id="shopDesc" placeholder="Débloquez un rôle de couleur" style="width: 100%; padding: 12px; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; color: #fff; font-size: 15px; margin-top: 5px;">
+                    </div>
+
+                    <h2 style="margin-top: 40px;">Articles en vente</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Article</th>
+                                <th>Description</th>
+                                <th>Prix</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shopBody"><tr><td colspan="4">Chargement...</td></tr></tbody>
+                    </table>
+                </div>
             </div>
 
-            <!-- MODALE DE CONFIRMATION -->
+            <!-- MODALE DE CONFIRMATION BANQUE -->
             <div class="modal-overlay" id="createModal">
                 <div class="modal">
                     <h3>⚠️ Confirmer la création</h3>
@@ -128,9 +167,10 @@ module.exports = function(client, dbNova, Economy) {
             <script>
                 const empBody = document.getElementById('empBody');
                 const bankBody = document.getElementById('bankBody');
+                const shopBody = document.getElementById('shopBody');
                 const alertMsg = document.getElementById('alertMsg');
                 const bankAlert = document.getElementById('bankAlert');
-                let employeesList = [];
+                const shopAlert = document.getElementById('shopAlert');
 
                 function switchTab(tabId, btn) {
                     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
@@ -144,7 +184,6 @@ module.exports = function(client, dbNova, Economy) {
                     const data = await res.json();
                     if (!data.success) return empBody.innerHTML = '<tr><td colspan="4">Erreur</td></tr>';
                     
-                    employeesList = data.employees;
                     let htmlContent = '';
                     let bankSelectHtml = '';
                     
@@ -192,6 +231,25 @@ module.exports = function(client, dbNova, Economy) {
                         htmlContent += '</tr>';
                     }
                     bankBody.innerHTML = htmlContent;
+                }
+
+                async function loadShopItems() {
+                    const res = await fetch('/api/shop/admin/items');
+                    const data = await res.json();
+                    if (!data.success) return shopBody.innerHTML = '<tr><td colspan="4">Erreur</td></tr>';
+                    
+                    if (data.items.length === 0) return shopBody.innerHTML = '<tr><td colspan="4">Aucun article en vente.</td></tr>';
+                    
+                    let htmlContent = '';
+                    for (const item of data.items) {
+                        htmlContent += '<tr>';
+                        htmlContent += '<td><strong>' + item.icon + ' ' + item.name + '</strong></td>';
+                        htmlContent += '<td>' + item.description + '</td>';
+                        htmlContent += '<td><strong style="color: #2dc770;">' + item.price + ' 🪙</strong></td>';
+                        htmlContent += '<td><button class="btn btn-red" onclick="deleteShopItem(\\'' + item._id + '\\')">Supprimer</button></td>';
+                        htmlContent += '</tr>';
+                    }
+                    shopBody.innerHTML = htmlContent;
                 }
 
                 async function modifyBalance(userId, action) {
@@ -265,8 +323,42 @@ module.exports = function(client, dbNova, Economy) {
                     if (result.success) loadBankAccounts();
                 }
 
+                async function createShopItem() {
+                    const icon = document.getElementById('shopIcon').value.trim() || '📦';
+                    const name = document.getElementById('shopName').value.trim();
+                    const description = document.getElementById('shopDesc').value.trim();
+                    const price = parseInt(document.getElementById('shopPrice').value);
+
+                    if (!name || !description || isNaN(price) || price <= 0) return alert("Veuillez remplir tous les champs correctement.");
+
+                    const res = await fetch('/api/shop/admin/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ icon, name, description, price }) });
+                    const result = await res.json();
+                    shopAlert.className = 'alert ' + (result.success ? 'success' : 'error');
+                    shopAlert.innerText = (result.success ? '✅ ' : '❌ ') + result.message;
+                    shopAlert.style.display = 'block';
+
+                    if (result.success) {
+                        document.getElementById('shopIcon').value = '';
+                        document.getElementById('shopName').value = '';
+                        document.getElementById('shopDesc').value = '';
+                        document.getElementById('shopPrice').value = '';
+                        loadShopItems();
+                    }
+                }
+
+                async function deleteShopItem(id) {
+                    if (!confirm("Supprimer cet article ?")) return;
+                    const res = await fetch('/api/shop/admin/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+                    const result = await res.json();
+                    shopAlert.className = 'alert ' + (result.success ? 'success' : 'error');
+                    shopAlert.innerText = (result.success ? '✅ ' : '❌ ') + result.message;
+                    shopAlert.style.display = 'block';
+                    if (result.success) loadShopItems();
+                }
+
                 loadEmployees();
                 loadBankAccounts();
+                loadShopItems();
             </script>
         </body>
         </html>`;
@@ -343,7 +435,6 @@ module.exports = function(client, dbNova, Economy) {
             const { userId, identifier } = req.body;
             let userEco = await Economy.findOne({ userId: String(userId) });
             
-            // Vérifie si l'identifiant est déjà pris
             const existingIdent = await Economy.findOne({ bankIdentifier: identifier });
             if (existingIdent) return res.json({ success: false, message: "Cet identifiant est déjà utilisé." });
 
@@ -358,7 +449,6 @@ module.exports = function(client, dbNova, Economy) {
                 await Economy.create({ userId: String(userId), balance: 0, bankCode: code, bankIdentifier: identifier });
             }
 
-            // Envoi du DM
             try {
                 const user = await client.users.fetch(userId);
                 const bankUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
@@ -392,6 +482,29 @@ module.exports = function(client, dbNova, Economy) {
             userEco.bankFrozen = false;
             await userEco.save();
             res.json({ success: true, message: "Accès bancaire supprimé." });
+        } catch (error) { res.json({ success: false, message: error.message }); }
+    });
+
+    // --- APIs BOUTIQUE (ADMIN) ---
+    router.get('/api/shop/admin/items', async (req, res) => {
+        try {
+            const items = await ShopItem.find({});
+            res.json({ success: true, items });
+        } catch (error) { res.json({ success: false, message: error.message }); }
+    });
+
+    router.post('/api/shop/admin/create', async (req, res) => {
+        try {
+            const { name, description, price, icon } = req.body;
+            await ShopItem.create({ name, description, price: parseInt(price), icon });
+            res.json({ success: true, message: "Article ajouté à la boutique !" });
+        } catch (error) { res.json({ success: false, message: error.message }); }
+    });
+
+    router.post('/api/shop/admin/delete', async (req, res) => {
+        try {
+            await ShopItem.findByIdAndDelete(req.body.id);
+            res.json({ success: true, message: "Article supprimé." });
         } catch (error) { res.json({ success: false, message: error.message }); }
     });
 
