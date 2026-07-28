@@ -236,8 +236,8 @@ module.exports = function(client, dbNova, Economy) {
   button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
   ul{list-style:none;}
   
-  .dash-wrap{display:grid;grid-template-columns:240px 1fr;min-height:100vh;}
-  .sidebar{background:var(--surface);border-right:1px solid var(--border);padding:24px 16px;display:flex;flex-direction:column;position:fixed;width:240px;height:100vh;}
+  .dash-wrap{min-height:100vh;background:var(--bg);}
+  .sidebar{background:var(--surface);border-right:1px solid var(--border);padding:24px 16px;display:flex;flex-direction:column;position:fixed;width:240px;height:100vh;z-index:10;}
   .logo{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-weight:700;font-size:18px;color:#fff;padding:0 12px;}
   .logo svg{width:24px;height:24px;}
   .side-nav{margin-top:40px;flex:1;}
@@ -265,13 +265,13 @@ module.exports = function(client, dbNova, Economy) {
   .balance-amount{font-size:42px;font-weight:700;color:#fff;margin-top:8px;font-family:'Space Grotesk';}
   .balance-status{display:inline-flex;align-items:center;gap:6px;background:var(--accent-dim);color:var(--accent);padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;margin-top:12px;}
   
-  .virtual-card{width:320px;height:180px;border-radius:16px;background:linear-gradient(135deg,#1C1F26,#0d0f12);position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);padding:20px;display:flex;flex-direction:column;justify-content:space-between;margin-top:20px;border:1px solid rgba(255,255,255,0.05);}
+  .virtual-card{width:100%;max-width:320px;height:180px;border-radius:16px;background:linear-gradient(135deg,#1C1F26,#0d0f12);position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);padding:20px;display:flex;flex-direction:column;justify-content:space-between;margin-top:20px;border:1px solid rgba(255,255,255,0.05);}
   .vc-top{display:flex;justify-content:space-between;align-items:flex-start;}
   .vc-brand{font-weight:700;font-size:14px;letter-spacing:1px;}
   .vc-chip{width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;}
   .vc-number{font-family:'IBM Plex Mono';font-size:16px;letter-spacing:3px;color:#fff;}
   .vc-bottom{display:flex;justify-content:space-between;align-items:flex-end;}
-  .vc-holder{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#ccc;}
+  .vc-holder{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#ccc;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .vc-expiry{font-size:12px;color:#aaa;}
   
   .status-card h3{font-size:16px;font-weight:600;margin-bottom:16px;}
@@ -289,7 +289,7 @@ module.exports = function(client, dbNova, Economy) {
   .tx-amount.neg{color:var(--danger);}
 
   .shop-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:24px;}
-  .shop-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;}
+  .shop-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;display:flex;flex-direction:column;align-items:center;}
   .shop-item-icon{font-size:40px;margin-bottom:16px;}
   .shop-item h3{font-size:18px;margin-bottom:8px;}
   .shop-item p{font-size:13px;color:var(--muted);margin-bottom:20px;}
@@ -297,7 +297,6 @@ module.exports = function(client, dbNova, Economy) {
   .shop-btn{margin-top:16px;width:100%;background:var(--surface2);border:1px solid var(--border);padding:12px;border-radius:10px;color:#fff;font-weight:600;cursor:not-allowed;opacity:0.5;}
 
   @media(max-width:900px){
-    .dash-wrap{grid-template-columns:1fr;}
     .sidebar{display:none;}
     .main-content{margin-left:0;padding:20px;}
     .grid-2{grid-template-columns:1fr;}
