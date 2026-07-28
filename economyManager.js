@@ -30,7 +30,7 @@ module.exports = function(client, dbNova, Economy) {
                 .badge.confirmed { background: #2dc770; color: #fff; }
                 .actions button { background: #5865F2; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 5px; margin-bottom: 5px; }
                 .actions button.remove { background: #f23f42; }
-                .actions button.bank { background: #FFD700; color: black; } /* NOUVEAU STYLE BOUTON BANQUE */
+                .actions button.bank { background: #FFD700; color: black; }
                 .alert { padding: 12px; border-radius: 8px; margin-top: 20px; font-weight: 600; display: none; }
                 .alert.success { background: #1e3a29; color: #2dc770; border: 1px solid #2dc770; }
                 .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
@@ -95,8 +95,7 @@ module.exports = function(client, dbNova, Economy) {
                         htmlContent += '<td class="actions">';
                         htmlContent += '<button onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'add\\')">➕ Prime</button>';
                         htmlContent += '<button class="remove" onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'remove\\')">➖ Amendes</button>';
-                        // NOUVEAU BOUTON BANQUE
-                        htmlContent += '<button class="bank" onclick="openBank(\\'' + emp.user_id + '\\', \\' + emp.username.replace(/'/g, "\\\\'") + '\\')">🏦 Banque</button>';
+                        htmlContent += '<button class="bank" onclick="openBank(\\'' + emp.user_id + '\\')">🏦 Banque</button>';
                         htmlContent += '</td>';
                         htmlContent += '</tr>';
                     }
@@ -123,16 +122,15 @@ module.exports = function(client, dbNova, Economy) {
                     if (result.success) loadEmployees();
                 }
 
-                // NOUVELLE FONCTION BANQUE
-                async function openBank(userId, username) {
+                async function openBank(userId) {
                     const res = await fetch('/api/economy/create-bank', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId })
+                        body: JSON.stringify({ userId: userId })
                     });
                     const result = await res.json();
                     if (result.success) {
-                        alert("Compte bancaire de " + username + " :\n\nCode d'accès : " + result.code + "\n\nVous pouvez lui transmettre ce code pour qu'il accède à la banque.");
+                        alert("Code d'accès bancaire généré : " + result.code + "\\n\\nTransmettez ce code à l'employé pour qu'il accède à la Vigi-Banque.");
                     } else {
                         alert("Erreur : " + result.message);
                     }
@@ -211,7 +209,6 @@ module.exports = function(client, dbNova, Economy) {
         }
     });
 
-    // NOUVELLE API : Ouvrir un compte bancaire
     router.post('/api/economy/create-bank', async (req, res) => {
         try {
             const { userId } = req.body;
