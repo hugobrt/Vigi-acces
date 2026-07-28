@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType, MessageFlags } = require('discord.js');
 const express = require('express');
+const session = require('express-session');
 const pkg = require('./package.json'); 
 const embedBuilderRoute = require('./embedBuilder'); 
 const economyManagerRoute = require('./economyManager');
@@ -10,6 +11,14 @@ const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Configuration des sessions (Pour garder la connexion de la banque active)
+app.use(session({
+    secret: process.env.SECRET_KEY || 'vigi-super-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 24 * 60 * 60 * 1000 } // Reste connecté 24h
+}));
 
 const client = new Client({
     intents: [
@@ -35,7 +44,12 @@ const EconomySchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
     balance: { type: Number, default: 0 },
     lastPayday: { type: Date, default: null },
-    bankCode: { type: String, default: null }
+    bankCode: { type: String, default: null },
+    transactions: [{
+        amount: Number,
+        label: String,
+        date: { type: Date, default: Date.now }
+    }]
 });
 const Economy = mongoose.model('Economy', EconomySchema);
 
@@ -92,9 +106,15 @@ async function processPayday() {
             let userEco = await Economy.findOne({ userId: String(emp.user_id) });
             if (userEco) {
                 userEco.balance += salary;
+                userEco.transactions.push({ amount: salary, label: 'Salaire automatique' });
                 await userEco.save();
             } else {
-                await Economy.create({ userId: String(emp.user_id), balance: salary, lastPayday: new Date() });
+                await Economy.create({ 
+                    userId: String(emp.user_id), 
+                    balance: salary, 
+                    lastPayday: new Date(),
+                    transactions: [{ amount: salary, label: 'Salaire automatique' }]
+                });
             }
             paidCount++;
         }
@@ -226,7 +246,7 @@ app.get('/', (req, res) => {
                 <div class="link-grid">
                     <a href="/embed-builder" class="link-card"><span class="link-icon">📝</span>Constructeur</a>
                     <a href="/economy-manager" class="link-card"><span class="link-icon">💰</span>Économie</a>
-                    <a href="/bank" class="link-card"><span class="link-icon">🏦</span>Banque</a>
+                    <a href="/bank/login" class="link-card"><span class="link-icon">🏦</span>Banque</a>
                 </div>
 
                 <div id="alertMsg" class="alert"></div>
