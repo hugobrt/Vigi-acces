@@ -14,129 +14,259 @@ module.exports = function(client, dbNova, Economy) {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Gestion de l'Économie</title>
             <style>
-                * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-                body { background-color: #313338; color: #dbdee1; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }
-                .container { background: #2b2d31; border-radius: 12px; padding: 32px; width: 100%; max-width: 900px; box-shadow: 0 8px 16px rgba(0,0,0,0.3); margin-bottom: 20px; }
-                h1 { color: #ffffff; margin-top: 0; font-size: 28px; border-bottom: 1px solid #1e1f22; padding-bottom: 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+                * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+                body { background: radial-gradient(circle at 0% 0%, #1a1c20 0%, #0e0f12 100%); color: #e6e8eb; margin: 0; padding: 50px 20px; display: flex; justify-content: center; min-height: 100vh; }
+                .glass-card { background: rgba(35, 37, 42, 0.6); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 24px; padding: 40px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5); margin-bottom: 32px; max-width: 1000px; width: 100%; }
+                h1 { font-size: 32px; font-weight: 800; margin: 0 0 20px 0; background: linear-gradient(90deg, #ffffff, #b5bac1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; }
+                h2 { font-size: 20px; font-weight: 600; margin: 0 0 24px 0; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; }
                 .back-link { display: inline-block; margin-bottom: 20px; color: #5865F2; text-decoration: none; font-weight: 600; }
                 table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { padding: 12px; text-align: left; border-bottom: 1px solid #1e1f22; }
-                th { color: #b5bac1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-                td { font-size: 16px; }
+                th, td { padding: 14px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+                th { color: #80848e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+                td { font-size: 15px; }
                 .user-info { display: flex; align-items: center; gap: 10px; }
                 .user-info img { width: 32px; height: 32px; border-radius: 50%; }
-                .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
-                .badge.trainee { background: #f23f42; color: #fff; }
-                .badge.confirmed { background: #2dc770; color: #fff; }
-                .actions button { background: #5865F2; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 5px; margin-bottom: 5px; }
-                .actions button.remove { background: #f23f42; }
-                .actions button.bank { background: #FFD700; color: black; }
-                .alert { padding: 12px; border-radius: 8px; margin-top: 20px; font-weight: 600; display: none; }
-                .alert.success { background: #1e3a29; color: #2dc770; border: 1px solid #2dc770; }
-                .alert.error { background: #3a1e1e; color: #f23f42; border: 1px solid #f23f42; }
+                .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+                .badge.trainee { background: rgba(242, 63, 66, 0.1); color: #f23f42; border: 1px solid rgba(242, 63, 66, 0.2); }
+                .badge.confirmed { background: rgba(45, 199, 112, 0.1); color: #2dc770; border: 1px solid rgba(45, 199, 112, 0.2); }
+                .badge.frozen { background: rgba(88, 101, 242, 0.1); color: #5865F2; border: 1px solid rgba(88, 101, 242, 0.2); }
+                .badge.active { background: rgba(45, 199, 112, 0.1); color: #2dc770; border: 1px solid rgba(45, 199, 112, 0.2); }
+                .btn { border: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-right: 5px; margin-bottom: 5px; color: #fff; }
+                .btn-blue { background: linear-gradient(135deg, #5865F2, #4752c4); }
+                .btn-red { background: linear-gradient(135deg, #f23f42, #c93538); }
+                .btn-gold { background: linear-gradient(135deg, #FFD700, #FFB800); color: black; }
+                .btn-green { background: linear-gradient(135deg, #2dc770, #26a85f); }
+                .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+                .alert { padding: 16px; border-radius: 12px; margin-bottom: 20px; font-weight: 600; display: none; }
+                .alert.success { background: rgba(45, 199, 112, 0.1); color: #2dc770; border: 1px solid rgba(45, 199, 112, 0.2); }
+                .alert.error { background: rgba(242, 63, 66, 0.1); color: #f23f42; border: 1px solid rgba(242, 63, 66, 0.2); }
+                .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 100; justify-content: center; align-items: center; }
+                .modal { background: #2b2d31; padding: 40px; border-radius: 20px; max-width: 500px; width: 90%; text-align: center; border: 1px solid rgba(255,255,255,0.1); }
+                .modal h3 { margin-top: 0; font-size: 24px; color: #fff; }
+                .modal input { width: 100%; padding: 14px; margin: 10px 0 20px 0; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; color: #fff; font-size: 16px; outline: none; }
+                .modal-actions { display: flex; gap: 10px; }
+                .modal-actions .btn { flex: 1; margin: 0; }
+                .tabs { display: flex; gap: 10px; margin-bottom: 30px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; }
+                .tab-btn { background: none; border: none; color: #80848e; font-size: 16px; font-weight: 600; cursor: pointer; padding: 10px 20px; border-radius: 8px; transition: all 0.2s; }
+                .tab-btn.active { background: rgba(88, 101, 242, 0.1); color: #fff; }
+                .tab-content { display: none; }
+                .tab-content.active { display: block; }
             </style>
         </head>
         <body>
-            <div class="container">
+            <div class="glass-card">
                 <a href="/" class="back-link">← Retour au Dashboard</a>
-                <h1>💰 Gestion de l'Économie & Employés</h1>
+                <h1>💰 Gestion Financière & Bancaire</h1>
                 
-                <div id="alertMsg" class="alert"></div>
-                <p>Liste des employés actifs (PostgreSQL) et de leurs soldes Vigi-Coins (MongoDB).</p>
-                
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Employé</th>
-                            <th>Statut</th>
-                            <th>Solde</th>
-                            <th>Actions (Admin)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="empBody">
-                        <tr><td colspan="4">Chargement des employés...</td></tr>
-                    </tbody>
-                </table>
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('empTab', this)">Employés & Solde</button>
+                    <button class="tab-btn" onclick="switchTab('bankTab', this)">Comptes Bancaires</button>
+                </div>
+
+                <!-- ONGLET EMPLOYÉS -->
+                <div id="empTab" class="tab-content active">
+                    <div id="alertMsg" class="alert"></div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Employé</th>
+                                <th>Statut</th>
+                                <th>Solde</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="empBody"><tr><td colspan="4">Chargement...</td></tr></tbody>
+                    </table>
+                </div>
+
+                <!-- ONGLET BANQUE -->
+                <div id="bankTab" class="tab-content">
+                    <div id="bankAlert" class="alert"></div>
+                    <h2>Créer un nouveau compte</h2>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 15px; margin-bottom: 30px; align-items: end;">
+                        <div>
+                            <label style="font-size: 12px; color: #80848e; font-weight: 600; text-transform: uppercase;">Employé</label>
+                            <select id="bankEmpSelect" style="width: 100%; padding: 12px; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; color: #fff; font-size: 15px;"></select>
+                        </div>
+                        <div>
+                            <label style="font-size: 12px; color: #80848e; font-weight: 600; text-transform: uppercase;">Identifiant Personnalisé</label>
+                            <input type="text" id="bankIdentifierInput" placeholder="ex: jean.dupont" style="width: 100%; padding: 12px; background: #1e1f22; border: 1px solid #111214; border-radius: 8px; color: #fff; font-size: 15px;">
+                        </div>
+                        <button class="btn btn-gold" onclick="openCreateModal()" style="height: 47px;">Créer le compte</button>
+                    </div>
+
+                    <h2 style="margin-top: 40px;">Comptes actifs</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Employé</th>
+                                <th>Identifiant</th>
+                                <th>Code Banque</th>
+                                <th>État</th>
+                                <th>Gestion</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bankBody"><tr><td colspan="5">Chargement...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- MODALE DE CONFIRMATION -->
+            <div class="modal-overlay" id="createModal">
+                <div class="modal">
+                    <h3>⚠️ Confirmer la création</h3>
+                    <p style="color: #b5bac1; margin-bottom: 20px;">Vous allez créer un compte pour <strong id="modalEmpName" style="color: #fff;"></strong> avec l'identifiant <strong id="modalIdent" style="color: #fff;"></strong>.</p>
+                    <p style="font-size: 13px; color: #80848e; margin-bottom: 20px;">Un code aléatoire sera généré et envoyé par Message Privé à l'employé sur Discord.</p>
+                    <div class="modal-actions">
+                        <button class="btn btn-red" onclick="closeModal()">Annuler</button>
+                        <button class="btn btn-green" onclick="confirmCreateBank()">Confirmer & Envoyer</button>
+                    </div>
+                </div>
             </div>
 
             <script>
                 const empBody = document.getElementById('empBody');
+                const bankBody = document.getElementById('bankBody');
                 const alertMsg = document.getElementById('alertMsg');
+                const bankAlert = document.getElementById('bankAlert');
+                let employeesList = [];
+
+                function switchTab(tabId, btn) {
+                    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    document.getElementById(tabId).classList.add('active');
+                    btn.classList.add('active');
+                }
 
                 async function loadEmployees() {
                     const res = await fetch('/api/economy/employees');
                     const data = await res.json();
+                    if (!data.success) return empBody.innerHTML = '<tr><td colspan="4">Erreur</td></tr>';
                     
-                    if (!data.success) {
-                        empBody.innerHTML = '<tr><td colspan="4">Erreur: ' + data.message + '</td></tr>';
-                        return;
-                    }
-
-                    if (data.employees.length === 0) {
-                        empBody.innerHTML = '<tr><td colspan="4">Aucun employé actif trouvé.</td></tr>';
-                        return;
-                    }
-
+                    employeesList = data.employees;
                     let htmlContent = '';
+                    let bankSelectHtml = '';
+                    
                     for (const emp of data.employees) {
-                        htmlContent += '<tr>';
-                        htmlContent += '<td><div class="user-info">';
-                        if (emp.avatar) {
-                            htmlContent += '<img src="' + emp.avatar + '">';
-                        }
-                        htmlContent += '<span>' + emp.username + '</span></div></td>';
-                        
                         const stageClass = emp.stage === 'confirmed' ? 'confirmed' : 'trainee';
                         const stageText = emp.stage === 'confirmed' ? 'Titulaire' : 'En formation';
+                        
+                        htmlContent += '<tr>';
+                        htmlContent += '<td><div class="user-info">' + (emp.avatar ? '<img src="' + emp.avatar + '">' : '') + '<span>' + emp.username + '</span></div></td>';
                         htmlContent += '<td><span class="badge ' + stageClass + '">' + stageText + '</span></td>';
-                        
                         htmlContent += '<td><strong>' + emp.balance + ' 🪙</strong></td>';
+                        htmlContent += '<td><button class="btn btn-green" onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'add\\')">➕</button> <button class="btn btn-red" onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'remove\\')">➖</button></td>';
+                        htmlContent += '</tr>';
+
+                        bankSelectHtml += '<option value="' + emp.user_id + '">' + emp.username + '</option>';
+                    }
+                    empBody.innerHTML = htmlContent || '<tr><td colspan="4">Aucun employé.</td></tr>';
+                    document.getElementById('bankEmpSelect').innerHTML = bankSelectHtml || '<option>Aucun employé</option>';
+                }
+
+                async function loadBankAccounts() {
+                    const res = await fetch('/api/bank/accounts');
+                    const data = await res.json();
+                    if (!data.success) return bankBody.innerHTML = '<tr><td colspan="5">Erreur</td></tr>';
+                    
+                    if (data.accounts.length === 0) return bankBody.innerHTML = '<tr><td colspan="5">Aucun compte bancaire actif.</td></tr>';
+                    
+                    let htmlContent = '';
+                    for (const acc of data.accounts) {
+                        const statusClass = acc.bankFrozen ? 'frozen' : 'active';
+                        const statusText = acc.bankFrozen ? '🔴 Gelé' : '🟢 Actif';
                         
-                        htmlContent += '<td class="actions">';
-                        htmlContent += '<button onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'add\\')">➕ Prime</button>';
-                        htmlContent += '<button class="remove" onclick="modifyBalance(\\'' + emp.user_id + '\\', \\'remove\\')">➖ Amendes</button>';
-                        htmlContent += '<button class="bank" onclick="openBank(\\'' + emp.user_id + '\\')">🏦 Banque</button>';
-                        htmlContent += '</td>';
+                        htmlContent += '<tr>';
+                        htmlContent += '<td><div class="user-info">' + (acc.avatar ? '<img src="' + acc.avatar + '">' : '') + '<span>' + acc.username + '</span></div></td>';
+                        htmlContent += '<td><strong style="color: #5865F2;">' + acc.bankIdentifier + '</strong></td>';
+                        htmlContent += '<td style="font-family: monospace; letter-spacing: 2px; color: #FFD700;">' + acc.bankCode + '</td>';
+                        htmlContent += '<td><span class="badge ' + statusClass + '">' + statusText + '</span></td>';
+                        htmlContent += '<td>';
+                        if (acc.bankFrozen) {
+                            htmlContent += '<button class="btn btn-green" onclick="toggleFreeze(\\'' + acc.userId + '\\')">Dégeler</button>';
+                        } else {
+                            htmlContent += '<button class="btn btn-blue" onclick="toggleFreeze(\\'' + acc.userId + '\\')">Geler</button>';
+                        }
+                        htmlContent += ' <button class="btn btn-red" onclick="deleteBank(\\'' + acc.userId + '\\')">Supprimer</button></td>';
                         htmlContent += '</tr>';
                     }
-                    empBody.innerHTML = htmlContent;
+                    bankBody.innerHTML = htmlContent;
                 }
 
                 async function modifyBalance(userId, action) {
-                    const amountStr = prompt("Combien de Vigi-Coins " + (action === 'add' ? 'ajouter à' : 'retirer de') + " cet employé ?");
+                    const amountStr = prompt("Montant à " + (action === 'add' ? 'ajouter' : 'retirer') + " ?");
                     if (!amountStr) return;
                     const amount = parseInt(amountStr);
-                    if (isNaN(amount) || amount <= 0) return alert('Montant invalide.');
+                    if (isNaN(amount) || amount <= 0) return alert('Invalide.');
 
-                    const res = await fetch('/api/economy/manage', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: userId, amount: action === 'add' ? amount : -amount })
-                    });
+                    const res = await fetch('/api/economy/manage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, amount: action === 'add' ? amount : -amount }) });
                     const result = await res.json();
-
+                    alertMsg.className = 'alert ' + (result.success ? 'success' : 'error');
+                    alertMsg.innerText = (result.success ? '✅ ' : '❌ ') + result.message;
                     alertMsg.style.display = 'block';
-                    alertMsg.className = result.success ? 'alert success' : 'alert error';
-                    alertMsg.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + result.message;
-
                     if (result.success) loadEmployees();
                 }
 
-                async function openBank(userId) {
-                    const res = await fetch('/api/economy/create-bank', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: userId })
+                function openCreateModal() {
+                    const select = document.getElementById('bankEmpSelect');
+                    const empName = select.options[select.selectedIndex].text;
+                    const ident = document.getElementById('bankIdentifierInput').value.trim();
+                    
+                    if (!ident) return alert("Veuillez entrer un identifiant.");
+                    
+                    document.getElementById('modalEmpName').innerText = empName;
+                    document.getElementById('modalIdent').innerText = ident;
+                    document.getElementById('createModal').style.display = 'flex';
+                }
+
+                function closeModal() {
+                    document.getElementById('createModal').style.display = 'none';
+                }
+
+                async function confirmCreateBank() {
+                    const userId = document.getElementById('bankEmpSelect').value;
+                    const identifier = document.getElementById('bankIdentifierInput').value.trim();
+                    
+                    const res = await fetch('/api/bank/create', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ userId, identifier }) 
                     });
                     const result = await res.json();
+                    
+                    closeModal();
+                    bankAlert.className = 'alert ' + (result.success ? 'success' : 'error');
+                    bankAlert.innerText = (result.success ? '✅ ' : '❌ ') + result.message;
+                    bankAlert.style.display = 'block';
+                    
                     if (result.success) {
-                        alert("Code d'accès bancaire généré : " + result.code + "\\n\\nTransmettez ce code à l'employé pour qu'il accède à la Vigi-Banque.");
-                    } else {
-                        alert("Erreur : " + result.message);
+                        document.getElementById('bankIdentifierInput').value = '';
+                        loadBankAccounts();
                     }
                 }
 
+                async function toggleFreeze(userId) {
+                    const res = await fetch('/api/bank/freeze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
+                    const result = await res.json();
+                    bankAlert.className = 'alert ' + (result.success ? 'success' : 'error');
+                    bankAlert.innerText = (result.success ? '✅ ' : '❌ ') + result.message;
+                    bankAlert.style.display = 'block';
+                    if (result.success) loadBankAccounts();
+                }
+
+                async function deleteBank(userId) {
+                    if (!confirm("Supprimer définitivement l'accès bancaire de cet employé ?")) return;
+                    const res = await fetch('/api/bank/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
+                    const result = await res.json();
+                    bankAlert.className = 'alert ' + (result.success ? 'success' : 'error');
+                    bankAlert.innerText = (result.success ? '✅ ' : '❌ ') + result.message;
+                    bankAlert.style.display = 'block';
+                    if (result.success) loadBankAccounts();
+                }
+
                 loadEmployees();
+                loadBankAccounts();
             </script>
         </body>
         </html>`;
@@ -146,12 +276,9 @@ module.exports = function(client, dbNova, Economy) {
     router.get('/api/economy/employees', async (req, res) => {
         try {
             const empRes = await dbNova.query("SELECT user_id, stage FROM employees WHERE status = 'active'");
-            
             const ecoDocs = await Economy.find({});
             const ecoMap = new Map();
-            for (const doc of ecoDocs) {
-                ecoMap.set(String(doc.userId), doc.balance);
-            }
+            for (const doc of ecoDocs) ecoMap.set(String(doc.userId), doc.balance);
 
             const guildId = process.env.GUILD_ID;
             const guild = client.guilds.cache.get(guildId);
@@ -161,83 +288,111 @@ module.exports = function(client, dbNova, Economy) {
             for (const emp of empRes.rows) {
                 try {
                     const member = await guild.members.fetch(emp.user_id);
-                    enriched.push({
-                        user_id: String(emp.user_id),
-                        username: member.user.username,
-                        avatar: member.user.displayAvatarURL(),
-                        stage: emp.stage,
-                        balance: ecoMap.get(String(emp.user_id)) || 0
-                    });
+                    enriched.push({ user_id: String(emp.user_id), username: member.user.username, avatar: member.user.displayAvatarURL(), stage: emp.stage, balance: ecoMap.get(String(emp.user_id)) || 0 });
                 } catch {
-                    enriched.push({
-                        user_id: String(emp.user_id),
-                        username: "Utilisateur introuvable",
-                        avatar: null,
-                        stage: emp.stage,
-                        balance: ecoMap.get(String(emp.user_id)) || 0
-                    });
+                    enriched.push({ user_id: String(emp.user_id), username: "Introuvable", avatar: null, stage: emp.stage, balance: ecoMap.get(String(emp.user_id)) || 0 });
                 }
             }
-
             res.json({ success: true, employees: enriched });
-        } catch (error) {
-            console.error(error);
-            res.json({ success: false, message: error.message });
-        }
+        } catch (error) { res.json({ success: false, message: error.message }); }
     });
 
     router.post('/api/economy/manage', async (req, res) => {
         try {
             const { userId, amount } = req.body;
             const finalAmount = parseInt(amount);
-            if (isNaN(finalAmount) || finalAmount === 0) return res.json({ success: false, message: "Montant invalide." });
-
             let userEco = await Economy.findOne({ userId: userId });
             const label = finalAmount > 0 ? 'Prime (Admin)' : 'Amende (Admin)';
             
             if (userEco) {
                 userEco.balance += finalAmount;
                 if (userEco.balance < 0) userEco.balance = 0;
-                userEco.transactions.push({ amount: finalAmount, label: label });
+                userEco.transactions.push({ amount: finalAmount, label });
                 await userEco.save();
             } else {
-                await Economy.create({ 
-                    userId: userId, 
-                    balance: finalAmount > 0 ? finalAmount : 0, 
-                    lastPayday: null,
-                    transactions: [{ amount: finalAmount, label: label }]
-                });
+                await Economy.create({ userId, balance: finalAmount > 0 ? finalAmount : 0, transactions: [{ amount: finalAmount, label }] });
             }
-
-            res.json({ success: true, message: "Solde mis à jour avec succès !" });
-        } catch (error) {
-            console.error(error);
-            res.json({ success: false, message: error.message });
-        }
+            res.json({ success: true, message: "Solde mis à jour !" });
+        } catch (error) { res.json({ success: false, message: error.message }); }
     });
 
-    router.post('/api/economy/create-bank', async (req, res) => {
+    // --- APIs BANQUE ---
+    router.get('/api/bank/accounts', async (req, res) => {
+        try {
+            const accounts = await Economy.find({ bankIdentifier: { $ne: null } });
+            const guildId = process.env.GUILD_ID;
+            const guild = client.guilds.cache.get(guildId);
+            const enriched = [];
+            for (const acc of accounts) {
+                let username = "Inconnu", avatar = null;
+                if (guild) {
+                    try {
+                        const member = await guild.members.fetch(acc.userId);
+                        username = member.user.username;
+                        avatar = member.user.displayAvatarURL();
+                    } catch {}
+                }
+                enriched.push({ userId: acc.userId, username, avatar, bankIdentifier: acc.bankIdentifier, bankCode: acc.bankCode, bankFrozen: acc.bankFrozen });
+            }
+            res.json({ success: true, accounts: enriched });
+        } catch (error) { res.json({ success: false, message: error.message }); }
+    });
+
+    router.post('/api/bank/create', async (req, res) => {
+        try {
+            const { userId, identifier } = req.body;
+            let userEco = await Economy.findOne({ userId: String(userId) });
+            
+            // Vérifie si l'identifiant est déjà pris
+            const existingIdent = await Economy.findOne({ bankIdentifier: identifier });
+            if (existingIdent) return res.json({ success: false, message: "Cet identifiant est déjà utilisé." });
+
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            
+            if (userEco) {
+                userEco.bankCode = code;
+                userEco.bankIdentifier = identifier;
+                userEco.bankFrozen = false;
+                await userEco.save();
+            } else {
+                await Economy.create({ userId: String(userId), balance: 0, bankCode: code, bankIdentifier: identifier });
+            }
+
+            // Envoi du DM
+            try {
+                const user = await client.users.fetch(userId);
+                const bankUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
+                await user.send(`🏦 **Vigi-Banque - Compte Créé**\n\nBonjour ! Votre compte bancaire a été ouvert par l'administration.\n\n**Identifiant :** ${identifier}\n**Code d'accès :** ${code}\n\nGardez précieusement ce code. Vous pouvez accéder à votre banque ici : ${bankUrl}/bank/login`);
+            } catch (e) { console.log("DM impossible à envoyer."); }
+
+            res.json({ success: true, message: "Compte créé et DM envoyé à l'employé !" });
+        } catch (error) { res.json({ success: false, message: error.message }); }
+    });
+
+    router.post('/api/bank/freeze', async (req, res) => {
         try {
             const { userId } = req.body;
             let userEco = await Economy.findOne({ userId: String(userId) });
+            if (!userEco || !userEco.bankIdentifier) return res.json({ success: false, message: "Compte introuvable." });
             
-            if (userEco && userEco.bankCode) {
-                return res.json({ success: true, code: userEco.bankCode });
-            }
+            userEco.bankFrozen = !userEco.bankFrozen;
+            await userEco.save();
+            res.json({ success: true, message: userEco.bankFrozen ? "Compte gelé." : "Compte dégelé." });
+        } catch (error) { res.json({ success: false, message: error.message }); }
+    });
+
+    router.post('/api/bank/delete', async (req, res) => {
+        try {
+            const { userId } = req.body;
+            let userEco = await Economy.findOne({ userId: String(userId) });
+            if (!userEco) return res.json({ success: false, message: "Compte introuvable." });
             
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
-            if (userEco) {
-                userEco.bankCode = code;
-                await userEco.save();
-            } else {
-                await Economy.create({ userId: String(userId), balance: 0, bankCode: code });
-            }
-            
-            res.json({ success: true, code: code });
-        } catch (error) {
-            console.error(error);
-            res.json({ success: false, message: error.message });
-        }
+            userEco.bankCode = null;
+            userEco.bankIdentifier = null;
+            userEco.bankFrozen = false;
+            await userEco.save();
+            res.json({ success: true, message: "Accès bancaire supprimé." });
+        } catch (error) { res.json({ success: false, message: error.message }); }
     });
 
     return router;
