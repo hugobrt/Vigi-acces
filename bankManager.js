@@ -55,6 +55,8 @@ module.exports = function(client, dbNova, Economy) {
   .login-box .sub{color:var(--muted);margin-bottom:32px;font-size:15px;}
   .input-group{margin-bottom:20px;}
   .input-group label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:500;}
+  .text-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;color:#fff;font-size:16px;outline:none;transition:border .2s;}
+  .text-input:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);}
   .code-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;color:#fff;font-size:24px;text-align:center;letter-spacing:12px;font-family:'IBM Plex Mono';outline:none;transition:border .2s;}
   .code-input:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);}
   .btn-primary{width:100%;background:var(--accent);color:#000;font-weight:700;padding:16px;border-radius:12px;font-size:15px;cursor:pointer;border:none;transition:transform .15s,box-shadow .2s;}
@@ -84,11 +86,15 @@ module.exports = function(client, dbNova, Economy) {
     <div class="login-form-side">
       <div class="login-box">
         <h1>Connexion</h1>
-        <p class="sub">Entrez votre code à 6 chiffres.</p>
+        <p class="sub">Entrez vos identifiants bancaires.</p>
         
         <form id="loginForm">
           <div class="input-group">
-            <label>Code d'accès</label>
+            <label>Identifiant</label>
+            <input type="text" id="identInput" class="text-input" placeholder="ex: jean.dupont" required>
+          </div>
+          <div class="input-group">
+            <label>Code d'accès (6 chiffres)</label>
             <input type="text" id="codeInput" class="code-input" maxlength="6" placeholder="------" required>
           </div>
           <div id="loginError" class="login-error"></div>
@@ -103,11 +109,12 @@ module.exports = function(client, dbNova, Economy) {
   <script>
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const identifier = document.getElementById('identInput').value;
       const code = document.getElementById('codeInput').value;
       const errorDiv = document.getElementById('loginError');
       
-      if (code.length !== 6) {
-        errorDiv.innerText = 'Le code doit comporter 6 chiffres.';
+      if (!identifier || code.length !== 6) {
+        errorDiv.innerText = 'Veuillez remplir tous les champs correctement.';
         errorDiv.style.display = 'block';
         return;
       }
@@ -118,14 +125,14 @@ module.exports = function(client, dbNova, Economy) {
         const res = await fetch('/bank/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code })
+          body: JSON.stringify({ identifier, code })
         });
         const data = await res.json();
 
         if (data.success) {
           window.location.href = '/bank';
         } else {
-          errorDiv.innerText = data.message || 'Code invalide.';
+          errorDiv.innerText = data.message || 'Identifiant ou code invalide.';
           errorDiv.style.display = 'block';
         }
       } catch (err) {
@@ -144,11 +151,24 @@ module.exports = function(client, dbNova, Economy) {
     // ----------------------------------------------------
     router.post('/bank/login', async (req, res) => {
         try {
-            const { code } = req.body;
-            const userEco = await Economy.findOne({ bankCode: code });
+            const { identifier, code } = req.body;
+            
+            // On nettoie l'identifiant (minuscules, sans espaces) pour la comparaison
+            const cleanIdentifier = identifier ? identifier.trim().toLowerCase() : null;
+            
+            // On cherche un compte qui a EXACTEMENT cet identifiant ET ce code
+            const userEco = await Economy.findOne({ 
+                bankIdentifier: cleanIdentifier, 
+                bankCode: code 
+            });
             
             if (!userEco) {
-                return res.json({ success: false, message: 'Code d\'accès invalide.' });
+                return res.json({ success: false, message: 'Identifiant ou code d\'accès invalide.' });
+            }
+
+            // On vérifie si le compte n'est pas gelé
+            if (userEco.bankFrozen) {
+                return res.json({ success: false, message: 'Votre compte est gelé. Contactez l\'administration.' });
             }
 
             req.session.bankUserId = userEco.userId;
