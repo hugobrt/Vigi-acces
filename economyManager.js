@@ -193,13 +193,20 @@ module.exports = function(client, dbNova, Economy) {
             if (isNaN(finalAmount) || finalAmount === 0) return res.json({ success: false, message: "Montant invalide." });
 
             let userEco = await Economy.findOne({ userId: userId });
+            const label = finalAmount > 0 ? 'Prime (Admin)' : 'Amende (Admin)';
             
             if (userEco) {
                 userEco.balance += finalAmount;
                 if (userEco.balance < 0) userEco.balance = 0;
+                userEco.transactions.push({ amount: finalAmount, label: label });
                 await userEco.save();
             } else {
-                await Economy.create({ userId: userId, balance: finalAmount > 0 ? finalAmount : 0, lastPayday: null });
+                await Economy.create({ 
+                    userId: userId, 
+                    balance: finalAmount > 0 ? finalAmount : 0, 
+                    lastPayday: null,
+                    transactions: [{ amount: finalAmount, label: label }]
+                });
             }
 
             res.json({ success: true, message: "Solde mis à jour avec succès !" });
