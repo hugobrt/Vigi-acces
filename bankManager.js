@@ -116,4 +116,288 @@ module.exports = function(client, dbNova, Economy) {
   .side-foot{border-top:1px solid rgba(255,255,255,.08); padding-top:16px; margin-top:10px;}
   .side-user{display:flex; align-items:center; gap:10px; padding:8px 10px;}
   .side-user b{font-size:13px; display:block;}
-  .side
+  .side-user span{font-size:11px; color:rgba(255,255,255,.4);}
+  .logout-btn{width:100%; margin-top:10px; text-align:left; padding:10px 14px; border-radius:10px; color:rgba(255,255,255,.5); font-size:13px; background:transparent; display:flex; align-items:center; gap:10px;}
+
+  .main{padding:34px 42px 60px; overflow-x:hidden;}
+  .topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;}
+  .topbar h1{font-size:23px; font-weight:700;}
+  .topbar .date{font-size:13px; color:var(--muted); margin-top:3px;}
+  .user-chip{display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--line); padding:6px 14px 6px 6px; border-radius:999px;}
+  
+  .dash-grid{display:grid; grid-template-columns:1.5fr 1fr; gap:24px; margin-bottom:24px;}
+  .panel{background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:26px;}
+  .balance-hero{background:linear-gradient(135deg,#17594E,#0B2A24); color:#fff; border-radius:var(--radius); padding:30px; position:relative; overflow:hidden;}
+  .balance-hero .amt{font-family:'Space Grotesk'; font-size:42px; font-weight:700; margin-top:14px; position:relative; z-index:1;}
+  .side-panels{display:flex; flex-direction:column; gap:24px;}
+  .avatar{width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--gold)); display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600;}
+
+  @media(max-width:980px){
+    .hero .wrap{grid-template-columns:1fr;}
+    .phone-stage{display:none;}
+    .login-shell{grid-template-columns:1fr;}
+    .login-side{display:none;}
+    .app-shell{grid-template-columns:1fr;}
+    .sidebar{display:none;}
+    .dash-grid{grid-template-columns:1fr;}
+    .nav-links{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 : LANDING -->
+<div id="page-landing" class="page active">
+  <nav class="nav">
+    <div class="wrap">
+      <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16.5 7.4 20.7 12 22C16.6 20.7 20 16.5 20 11V5L12 2Z" fill="#2FD9A8" fill-opacity="0.18" stroke="#2FD9A8" stroke-width="1.5"/><circle cx="12" cy="11" r="3" stroke="#2FD9A8" stroke-width="1.5"/></svg>
+        Vigi-Banque
+      </div>
+      <div class="nav-links">
+        <a href="#features">Fonctionnalités</a>
+        <a href="#security">Sécurité</a>
+      </div>
+      <div class="nav-actions">
+        <a href="javascript:void(0)" class="btn btn-primary" onclick="showPage('login')">Accéder à mon espace</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> Espace sécurisé · Employés</div>
+        <h1>La banque qui <em>veille</em> sur votre argent.</h1>
+        <p class="lead">Consultez votre solde, vos transactions et vos fiches de paie en temps réel. Un accès réservé aux employés de l'entreprise.</p>
+        <div class="hero-cta">
+          <a href="javascript:void(0)" class="btn btn-primary" onclick="showPage('login')">Se connecter</a>
+        </div>
+      </div>
+
+      <div class="phone-stage">
+        <div class="radar"><div class="radar-sweep"><i></i></div></div>
+        <div class="phone">
+          <div class="screen-head"><span>9:41</span><span>●●●●● Vigi</span></div>
+          <div class="greet">Bonjour Employé</div>
+          <div class="name">Compte courant</div>
+          <div class="balance-card">
+            <div class="lbl">Solde disponible</div>
+            <div class="amt">1 500 🪙</div>
+            <div class="chg">↑ Synchronisé avec l'entreprise</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+</div>
+
+<!-- PAGE 2 : LOGIN -->
+<div id="page-login" class="page">
+  <div class="login-shell">
+    <div class="login-side">
+      <a href="javascript:void(0)" class="back-link" onclick="showPage('landing')">← Retour au site</a>
+      <div class="brand" style="color:#fff;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16.5 7.4 20.7 12 22C16.6 20.7 20 16.5 20 11V5L12 2Z" fill="#2FD9A8" fill-opacity="0.18" stroke="#2FD9A8" stroke-width="1.5"/><circle cx="12" cy="11" r="3" stroke="#2FD9A8" stroke-width="1.5"/></svg>
+        Vigi-Banque
+      </div>
+      <div class="quote">
+        <p>"Toujours un œil sur mes comptes, où que je sois."</p>
+        <span>— Espace Employé</span>
+      </div>
+      <div style="font-size:12px; color:rgba(255,255,255,.35);">🔒 Connexion chiffrée de bout en bout</div>
+    </div>
+
+    <div class="login-form-col">
+      <div class="login-box">
+        <a href="javascript:void(0)" class="back-link" onclick="showPage('landing')">← Retour au site</a>
+        <h2>Connexion Employé</h2>
+        <p class="sub">Entrez le code d'accès fourni par votre entreprise.</p>
+
+        <form onsubmit="event.preventDefault(); attemptLogin();">
+          <div class="field">
+            <label>Code d'accès (6 chiffres)</label>
+            <input type="text" id="bankCodeInput" maxlength="6" placeholder="••••••" style="text-align: center; letter-spacing: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 22px;" required>
+          </div>
+          <div id="loginError" style="color: var(--coral); margin-top: 15px; font-size: 13px; display:none;"></div>
+          <div style="margin-top: 22px;">
+            <button type="submit" class="btn btn-dark btn-block">Se connecter</button>
+          </div>
+        </form>
+
+        <div class="otp-note">🛡️ Une validation par code à usage unique peut être demandée pour toute connexion inhabituelle.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 3 : DASHBOARD -->
+<div id="page-dashboard" class="page">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand" style="color:#fff;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16.5 7.4 20.7 12 22C16.6 20.7 20 16.5 20 11V5L12 2Z" fill="#2FD9A8" fill-opacity="0.18" stroke="#2FD9A8" stroke-width="1.5"/><circle cx="12" cy="11" r="3" stroke="#2FD9A8" stroke-width="1.5"/></svg>
+        Vigi-Banque
+      </div>
+      <nav class="side-nav">
+        <a href="javascript:void(0)" class="active"> Accueil</a>
+        <a href="javascript:void(0)"> Comptes</a>
+        <a href="javascript:void(0)"> Transactions</a>
+      </nav>
+      <div class="side-foot">
+        <div class="side-user">
+          <div class="avatar" id="sideAvatar">U</div>
+          <div><b id="sideUserName">Employé</b><span id="sideUserPlan">Compte</span></div>
+        </div>
+        <button class="logout-btn" onclick="logout()"> Se déconnecter</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h1 id="dashGreeting">Bonjour 👋</h1>
+          <div class="date" id="dashDate"></div>
+        </div>
+        <div class="user-chip"><div class="avatar" style="width:28px;height:28px;font-size:11px;" id="topAvatar">U</div><b id="topUserChipName">Employé</b></div>
+      </div>
+
+      <div class="dash-grid">
+        <div class="balance-hero">
+          <div class="lbl" style="font-size:12.5px; color:rgba(255,255,255,.55);">Solde disponible</div>
+          <div class="amt" id="dashBalance">0 Vigi-Coins</div>
+          <div class="chg" style="margin-top:10px; font-size:13px; color:var(--primary-bright);">Synchronisé avec l'entreprise</div>
+        </div>
+
+        <div class="panel">
+          <h3 style="font-size:15px; font-weight:600; margin-bottom:16px;">Statut du compte</h3>
+          <div style="background: #f4f6f5; padding: 15px; border-radius: 12px; margin-bottom: 10px; font-weight: 600;">
+            <span id="dashStatus">En attente...</span>
+          </div>
+          <p style="font-size: 13px; color: var(--muted);">Votre compte est lié à votre statut d'employé actif au sein de l'entreprise.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="font-size:15px; font-weight:600; margin-bottom:18px;">Transactions récentes</h3>
+        <div style="display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid var(--line);">
+          <div style="width:40px; height:40px; border-radius:12px; background:var(--paper); display:flex; align-items:center; justify-content:center; font-size:17px;">💼</div>
+          <div style="flex:1;"><b style="font-size:14px; display:block;">Virement salaire — Entreprise</b><span style="font-size:12px; color:var(--muted);">Synchronisation automatique</span></div>
+          <div style="font-family:'IBM Plex Mono'; color:var(--primary); font-weight:500;">+ Virement</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; padding:13px 0;">
+          <div style="width:40px; height:40px; border-radius:12px; background:var(--paper); display:flex; align-items:center; justify-content:center; font-size:17px;">🚀</div>
+          <div style="flex:1;"><b style="font-size:14px; display:block;">Boutique (Bientôt)</b><span style="font-size:12px; color:var(--muted);">En cours de développement</span></div>
+          <div style="font-family:'IBM Plex Mono'; color:var(--muted);">WIP</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  function showPage(name){
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    window.scrollTo(0,0);
+  }
+
+  function logout() {
+    document.getElementById('bankCodeInput').value = '';
+    showPage('login');
+  }
+
+  async function attemptLogin() {
+    const code = document.getElementById('bankCodeInput').value;
+    const errorDiv = document.getElementById('loginError');
+    
+    if (code.length !== 6) {
+      errorDiv.innerText = 'Le code doit comporter 6 chiffres.';
+      errorDiv.style.display = 'block';
+      return;
+    }
+
+    errorDiv.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/bank/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        document.getElementById('dashBalance').innerText = data.balance.toLocaleString('fr-FR') + ' Vigi-Coins';
+        
+        const name = data.username || 'Employé';
+        const initial = name.charAt(0).toUpperCase();
+        
+        document.getElementById('dashGreeting').innerText = 'Bonjour, ' + name + ' 👋';
+        document.getElementById('sideUserName').innerText = name;
+        document.getElementById('topUserChipName').innerText = name;
+        document.getElementById('sideAvatar').innerText = initial;
+        document.getElementById('topAvatar').innerText = initial;
+        
+        const planName = data.stage === 'confirmed' ? 'Titulaire' : (data.stage === 'trainee' ? 'En formation' : 'Non employé');
+        document.getElementById('sideUserPlan').innerText = planName;
+        document.getElementById('dashStatus').innerText = planName;
+
+        const now = new Date();
+        document.getElementById('dashDate').innerText = now.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+        showPage('dashboard');
+      } else {
+        errorDiv.innerText = data.message || 'Code invalide.';
+        errorDiv.style.display = 'block';
+      }
+    } catch (err) {
+      errorDiv.innerText = 'Erreur réseau.';
+      errorDiv.style.display = 'block';
+    }
+  }
+</script>
+</body>
+</html>`;
+        res.send(html);
+    });
+
+    router.post('/api/bank/login', async (req, res) => {
+        try {
+            const { code } = req.body;
+            const userEco = await Economy.findOne({ bankCode: code });
+            
+            if (!userEco) {
+                return res.json({ success: false, message: 'Code d\'accès invalide.' });
+            }
+
+            let stage = 'Non employé';
+            let username = 'Employé';
+            
+            try {
+                const empRes = await dbNova.query("SELECT stage FROM employees WHERE user_id = $1 AND status = 'active'", [userEco.userId]);
+                if (empRes.rows.length > 0) {
+                    stage = empRes.rows[0].stage;
+                }
+                
+                const guildId = process.env.GUILD_ID;
+                const guild = client.guilds.cache.get(guildId);
+                if (guild) {
+                    try {
+                        const member = await guild.members.fetch(userEco.userId);
+                        username = member.user.username;
+                    } catch(e) {}
+                }
+            } catch (e) { 
+                console.error("Erreur BDD Nova bank login:", e); 
+            }
+
+            res.json({ success: true, balance: userEco.balance, stage, username });
+        } catch (error) {
+            console.error(error);
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    return router;
+};
