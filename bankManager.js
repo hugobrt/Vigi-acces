@@ -287,6 +287,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         if (tx.status === 'approved') {
             result.newBalance = tx.newBalance;
             result.itemName = tx.itemName;
+            result.itemPrice = tx.itemPrice;
         } else {
             result.message = tx.message;
         }
@@ -395,6 +396,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     border-top:5px solid var(--accent);
     animation:spin 1s linear infinite;margin:0 auto 20px;
   }
+  .loader-ring.gold{border-top-color:#FFD700;}
   @keyframes spin{100%{transform:rotate(360deg);}}
 
   /* Succès / Échec */
@@ -406,6 +408,13 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .pay-btn{margin-top:25px;background:var(--surface2);color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;border:1px solid var(--border);width:100%;}
   
   .discord-notify{display:inline-flex;align-items:center;gap:8px;color:#5865F2;font-weight:600;margin-top:10px;}
+
+  .recap-box{background:#181C24;border:1px solid #222732;border-radius:12px;padding:16px;margin:20px 0;text-align:left;}
+  .recap-row{display:flex;justify-content:space-between;margin-bottom:12px;font-size:14px;}
+  .recap-row:last-child{margin-bottom:0;border-top:1px solid #222732;padding-top:12px;}
+  .recap-label{color:var(--muted);}
+  .recap-val{color:#fff;font-weight:600;}
+  .recap-val.price{color:var(--accent);font-family:'IBM Plex Mono',monospace;}
 </style>
 </head>
 <body>
@@ -450,11 +459,23 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         </div>
       </div>
 
+      <!-- État 2.5 : Contact Banque -->
+      <div class="pay-state" id="stateContactBank">
+        <div class="loader-ring gold"></div>
+        <h3 style="margin-top:0;font-size:18px;color:#fff;">Contact établissement bancaire</h3>
+        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Connexion sécurisée à Vigi-Banque en cours...</p>
+      </div>
+
       <!-- État 3 : Succès -->
       <div class="pay-state" id="stateSuccess">
         <div class="res-circle success">✔</div>
         <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement validé</h3>
-        <p style="color:var(--muted);margin:10px 0;">Vous avez obtenu : <strong id="successItemName" style="color:var(--accent);"></strong></p>
+        <div class="recap-box">
+            <div class="recap-row"><span class="recap-label">Article</span><span class="recap-val" id="recapItemName"></span></div>
+            <div class="recap-row"><span class="recap-label">Prix</span><span class="recap-val price" id="recapItemPrice"></span></div>
+            <div class="recap-row"><span class="recap-label">Nouveau solde</span><span class="recap-val" id="recapBalance"></span></div>
+        </div>
+        <p style="color:var(--muted); font-size:12px;">Redirection vers le site marchand...</p>
         <button class="pay-btn" onclick="closePayment()">Terminer</button>
       </div>
 
@@ -653,9 +674,19 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 
             if (checkData.status === 'approved') {
                 clearInterval(pollInterval);
+                
+                // Étape Contact Banque
+                setPayState('stateContactBank');
+                await new Promise(r => setTimeout(r, 2500)); // 2.5s d'attente simulant le contact banque
+                
+                // Étape Succès avec Recap
                 userBalance = checkData.newBalance;
                 document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
-                document.getElementById('successItemName').innerText = checkData.itemName;
+                
+                document.getElementById('recapItemName').innerText = checkData.itemName;
+                document.getElementById('recapItemPrice').innerText = '- ' + checkData.itemPrice + ' 🪙';
+                document.getElementById('recapBalance').innerText = userBalance.toLocaleString('fr-FR') + ' 🪙';
+                
                 setPayState('stateSuccess');
                 loadData(); // Rafraîchir l'historique
             } else if (checkData.status === 'declined' || checkData.status === 'expired') {
@@ -720,6 +751,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 tx.status = 'approved';
                 tx.newBalance = userEco.balance;
                 tx.itemName = item.name;
+                tx.itemPrice = item.price;
 
                 await interaction.update({ content: `✅ **Paiement validé**\nVous avez obtenu : **${item.name}**\nNouveau solde : ${userEco.balance} 🪙`, components: [] });
             } else {
