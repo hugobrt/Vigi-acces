@@ -305,17 +305,50 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .frozen-overlay h1{color:var(--danger);font-size:32px;margin-bottom:10px;}
   .frozen-overlay p{color:var(--muted);max-width:400px;line-height:1.6;}
 
-  /* PAYMENT OVERLAY (Apple Pay / ACS) */
-  .pay-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);z-index:2000;justify-content:center;align-items:center;flex-direction:column;text-align:center;}
-  .pay-card{width:300px;height:180px;background:linear-gradient(135deg,#1C1F26,#0d0f12);border-radius:16px;padding:20px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;transition:transform 0.5s ease, opacity 0.5s ease;}
-  .pay-card.tapped{transform:translateY(-20px) scale(0.95);opacity:0.5;}
-  .acs-box{display:none;background:#11141A;padding:40px;border-radius:20px;border:1px solid #222732;width:350px;text-align:center;}
-  .acs-spinner{border:4px solid rgba(0,224,176,0.2);border-top:4px solid var(--accent);border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:20px auto;}
+  /* ===========================================
+     ANIMATION PAIEMENT (APPLE PAY / ACS STYLE)
+     =========================================== */
+  .pay-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:2000;justify-content:center;align-items:center;flex-direction:column;text-align:center;}
+  
+  .pay-state{display:none;opacity:0;transform:translateY(10px) scale(0.95);transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1);}
+  .pay-state.active{display:block;opacity:1;transform:translateY(0) scale(1);}
+
+  /* Carte bancaire animée */
+  .pay-card-anim{
+    width:300px;height:180px;background:linear-gradient(135deg,#1C1F26,#0d0f12);
+    border-radius:16px;padding:20px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;
+    position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.1);
+    box-shadow:0 20px 50px rgba(0,0,0,0.5);
+  }
+  .contactless-wave{
+    position:absolute;top:50%;right:-20px;transform:translateY(-50%);
+    color:var(--accent);font-size:40px;opacity:0;
+  }
+  .pay-card-anim.tapping .contactless-wave{
+    animation:wave 1.5s infinite;
+  }
+  @keyframes wave{
+    0% {opacity:0; transform:translateY(-50%) scale(0.8) rotate(-15deg);}
+    50%{opacity:1;}
+    100%{opacity:0; transform:translateY(-50%) scale(1.5) rotate(-15deg);}
+  }
+
+  /* Cercle de chargement (Loader) */
+  .loader-ring{
+    width:80px;height:80px;border-radius:50%;
+    border:5px solid rgba(255,255,255,0.1);
+    border-top:5px solid var(--accent);
+    animation:spin 1s linear infinite;margin:0 auto 20px;
+  }
   @keyframes spin{100%{transform:rotate(360deg);}}
-  .acs-bar{height:4px;background:#222732;border-radius:2px;margin-top:20px;overflow:hidden;}
-  .acs-bar-fill{height:100%;width:0%;background:var(--accent);transition:width 2.5s linear;}
-  .success-box{display:none;}
-  .success-check{width:80px;height:80px;background:var(--accent);border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:40px;color:#000;font-weight:bold;}
+
+  /* Succès / Échec */
+  .res-circle{width:80px;height:80px;border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:40px;color:#000;font-weight:bold;animation:popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);}
+  .res-circle.success{background:var(--accent);}
+  .res-circle.fail{background:var(--danger);color:#fff;}
+  @keyframes popIn{from{transform:scale(0);}to{transform:scale(1);}}
+
+  .pay-btn{margin-top:25px;background:var(--surface2);color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;border:1px solid var(--border);}
 </style>
 </head>
 <body>
@@ -329,32 +362,41 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 
   <!-- ÉCRAN DE PAIEMENT -->
   <div class="pay-overlay" id="payOverlay">
-    <div class="pay-card" id="payCard">
-      <div style="display:flex;justify-content:space-between;"><div style="font-weight:700;font-size:14px;letter-spacing:1px;">VIGI · EMPLOYÉ</div><div style="width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;"></div></div>
-      <div class="mono" style="font-size:16px;letter-spacing:3px;color:#fff;">•••• •••• •••• 7734</div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:#ccc;"><div id="payCardName">NOM</div><div style="color:#aaa;">12/26</div></div>
-    </div>
     
-    <div class="acs-box" id="acsBox">
-      <h3 style="margin-top:0;font-size:18px;color:#fff;">Authentification de paiement</h3>
-      <div class="acs-spinner"></div>
-      <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Veuillez patienter pendant la vérification de votre paiement...</p>
-      <div class="acs-bar"><div class="acs-bar-fill" id="acsBarFill"></div></div>
+    <!-- État 1 : Carte + Contactless -->
+    <div class="pay-state" id="stateCard">
+      <div class="pay-card-anim" id="animCard">
+        <div class="contactless-wave">📡</div>
+        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700;font-size:14px;letter-spacing:1px;">VIGI · EMPLOYÉ</div><div style="width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;"></div></div>
+        <div class="mono" style="font-size:16px;letter-spacing:3px;color:#fff;">•••• •••• •••• 7734</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#ccc;"><div id="payCardName">NOM</div><div style="color:#aaa;">12/26</div></div>
+      </div>
+      <p style="margin-top:20px;color:#fff;font-weight:600;">Paiement en cours...</p>
     </div>
 
-    <div class="success-box" id="successBox">
-      <div class="success-check">✔</div>
+    <!-- État 2 : ACS / Vérification -->
+    <div class="pay-state" id="stateAcs">
+      <div class="loader-ring"></div>
+      <h3 style="margin-top:0;font-size:18px;color:#fff;">Vérification de la transaction</h3>
+      <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Authentification sécurisée en cours...</p>
+    </div>
+
+    <!-- État 3 : Succès -->
+    <div class="pay-state" id="stateSuccess">
+      <div class="res-circle success">✔</div>
       <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement validé</h3>
       <p style="color:var(--muted);margin:10px 0;">Vous avez obtenu : <strong id="successItemName" style="color:var(--accent);"></strong></p>
-      <button onclick="closePayment()" style="margin-top:20px;background:var(--accent);color:#000;padding:12px 24px;border-radius:10px;font-weight:700;">Retour à la boutique</button>
+      <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
     </div>
 
-    <div class="success-box" id="failBox" style="display:none;">
-      <div class="success-check" style="background:var(--danger);">✖</div>
+    <!-- État 4 : Échec -->
+    <div class="pay-state" id="stateFail">
+      <div class="res-circle fail">✖</div>
       <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement refusé</h3>
       <p style="color:var(--muted);margin:10px 0;" id="failReason">Fonds insuffisants.</p>
-      <button onclick="closePayment()" style="margin-top:20px;background:var(--surface2);padding:12px 24px;border-radius:10px;font-weight:600;color:#fff;">Retour à la boutique</button>
+      <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
     </div>
+
   </div>
 
   <div class="dash-wrap">
@@ -417,6 +459,12 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     function switchTab(t) {
       document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
       document.getElementById('tab-' + t).style.display = 'block';
+    }
+
+    // Gestion des états de l'animation de paiement
+    function setPayState(stateId) {
+      document.querySelectorAll('.pay-state').forEach(s => s.classList.remove('active'));
+      document.getElementById(stateId).classList.add('active');
     }
 
     async function loadData() {
@@ -486,51 +534,40 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     }
 
     async function buyItem(itemId) {
-        // Afficher l'overlay
+        // 1. Afficher l'overlay et la carte
         document.getElementById('payOverlay').style.display = 'flex';
-        document.getElementById('payCard').style.display = 'flex';
-        document.getElementById('payCard').classList.add('tapped');
-        document.getElementById('acsBox').style.display = 'none';
-        document.getElementById('successBox').style.display = 'none';
-        document.getElementById('failBox').style.display = 'none';
-        document.getElementById('acsBarFill').style.width = '0%';
+        document.getElementById('animCard').classList.add('tapping');
+        setPayState('stateCard');
 
-        // Attendre 1s (effet carte tap)
-        await new Promise(r => setTimeout(r, 1000));
-
-        // Afficher ACS
-        document.getElementById('payCard').style.display = 'none';
-        document.getElementById('acsBox').style.display = 'block';
-        
-        // Lancer la barre de progression
-        setTimeout(() => {
-            document.getElementById('acsBarFill').style.width = '100%';
-        }, 100);
-
-        // Appeler l'API pendant que la barre se remplit
+        // Lancer la requête d'achat en arrière-plan
         const resPromise = fetch('/api/shop/purchase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ itemId })
         });
 
-        // Attendre la fin de l'animation (2.5s)
-        await new Promise(r => setTimeout(r, 2600));
+        // 2. Attendre 1.8s (effet Contactless)
+        await new Promise(r => setTimeout(r, 1800));
+        document.getElementById('animCard').classList.remove('tapping');
+
+        // 3. Passer à l'authentification (Loader)
+        setPayState('stateAcs');
+
+        // 4. Attendre la réponse de l'API + 1.5s pour l'effet de chargement
         const res = await resPromise;
         const data = await res.json();
+        await new Promise(r => setTimeout(r, 1500));
 
-        document.getElementById('acsBox').style.display = 'none';
-
+        // 5. Afficher le résultat
         if (data.success) {
             userBalance = data.newBalance;
             document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
             document.getElementById('successItemName').innerText = data.itemName;
-            document.getElementById('successBox').style.display = 'block';
-            // Rafraîchir les transactions
-            loadData();
+            setPayState('stateSuccess');
+            loadData(); // Rafraîchir l'historique
         } else {
             document.getElementById('failReason').innerText = data.message || "Une erreur est survenue.";
-            document.getElementById('failBox').style.display = 'block';
+            setPayState('stateFail');
         }
     }
 
