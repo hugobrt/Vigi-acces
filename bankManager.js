@@ -306,31 +306,58 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .frozen-overlay p{color:var(--muted);max-width:400px;line-height:1.6;}
 
   /* ===========================================
-     ANIMATION PAIEMENT (APPLE PAY / ACS STYLE)
+     ANIMATION PAIEMENT (APPLE PAY / TERMINAL)
      =========================================== */
-  .pay-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:2000;justify-content:center;align-items:center;flex-direction:column;text-align:center;}
+  .pay-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:2000;justify-content:center;align-items:flex-end;text-align:center;}
   
-  .pay-state{display:none;opacity:0;transform:translateY(10px) scale(0.95);transition:all 0.4s cubic-bezier(0.4, 0, 0.2, 1);}
-  .pay-state.active{display:block;opacity:1;transform:translateY(0) scale(1);}
+  .pay-sheet{
+    background:#1C1C1E;width:100%;max-width:420px;
+    border-radius:24px 24px 0 0;padding:24px 20px 40px;
+    box-shadow:0 -10px 40px rgba(0,0,0,0.5);
+    transform:translateY(100%);
+    transition:transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .pay-overlay.active .pay-sheet{transform:translateY(0);}
+  
+  .sheet-handle{width:40px;height:5px;background:#666;border-radius:3px;margin:0 auto 24px;}
+  .sheet-title{color:#fff;font-size:16px;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;}
+  
+  .pay-state{display:none;}
+  .pay-state.active{display:block;animation:fadeIn 0.3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 
-  /* Carte bancaire animée */
-  .pay-card-anim{
-    width:300px;height:180px;background:linear-gradient(135deg,#1C1F26,#0d0f12);
-    border-radius:16px;padding:20px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;
-    position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.1);
-    box-shadow:0 20px 50px rgba(0,0,0,0.5);
+  /* Terminal Card */
+  .terminal-card{
+    width:280px;height:170px;background:linear-gradient(135deg,#2C2C2E,#1C1C1E);
+    border:1px solid rgba(255,255,255,0.1);border-radius:16px;margin:0 auto 30px;
+    position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);
+    transform:scale(0.9);transition:transform 0.5s ease;
   }
-  .contactless-wave{
-    position:absolute;top:50%;right:-20px;transform:translateY(-50%);
-    color:var(--accent);font-size:40px;opacity:0;
+  .terminal-card.tapping{transform:scale(1) translateY(-5px);}
+  
+  .contactless-icon{
+    position:absolute;top:20px;right:20px;color:rgba(255,255,255,0.8);
   }
-  .pay-card-anim.tapping .contactless-wave{
-    animation:wave 1.5s infinite;
+  .contactless-pulse{
+    position:absolute;top:18px;right:18px;width:30px;height:30px;
+    border:2px solid var(--accent);border-radius:50%;opacity:0;
   }
-  @keyframes wave{
-    0% {opacity:0; transform:translateY(-50%) scale(0.8) rotate(-15deg);}
-    50%{opacity:1;}
-    100%{opacity:0; transform:translateY(-50%) scale(1.5) rotate(-15deg);}
+  .terminal-card.tapping .contactless-pulse{
+    animation:pulseRing 1.5s infinite;
+  }
+  @keyframes pulseRing{
+    0% {transform:scale(0.8);opacity:0.8;}
+    100%{transform:scale(2.5);opacity:0;}
+  }
+
+  .term-dots{display:flex;gap:8px;justify-content:center;margin-top:10px;}
+  .term-dots span{width:8px;height:8px;border-radius:50%;background:#444;}
+  .term-dots.active span{animation:dotBlink 1.2s infinite both;}
+  .term-dots span:nth-child(2){animation-delay:0.2s;}
+  .term-dots span:nth-child(3){animation-delay:0.4s;}
+  @keyframes dotBlink{
+    0%, 100% {background:#444;}
+    50% {background:var(--accent);box-shadow:0 0 10px var(--accent);}
   }
 
   /* Cercle de chargement (Loader) */
@@ -348,7 +375,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .res-circle.fail{background:var(--danger);color:#fff;}
   @keyframes popIn{from{transform:scale(0);}to{transform:scale(1);}}
 
-  .pay-btn{margin-top:25px;background:var(--surface2);color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;border:1px solid var(--border);}
+  .pay-btn{margin-top:25px;background:var(--surface2);color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;border:1px solid var(--border);width:100%;}
 </style>
 </head>
 <body>
@@ -360,43 +387,52 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     <button onclick="logout()" style="margin-top:30px;background:var(--surface2);padding:12px 24px;border-radius:10px;font-weight:600;color:#fff;">Se déconnecter</button>
   </div>
 
-  <!-- ÉCRAN DE PAIEMENT -->
+  <!-- ÉCRAN DE PAIEMENT (APPLE PAY / TERMINAL) -->
   <div class="pay-overlay" id="payOverlay">
-    
-    <!-- État 1 : Carte + Contactless -->
-    <div class="pay-state" id="stateCard">
-      <div class="pay-card-anim" id="animCard">
-        <div class="contactless-wave">📡</div>
-        <div style="display:flex;justify-content:space-between;"><div style="font-weight:700;font-size:14px;letter-spacing:1px;">VIGI · EMPLOYÉ</div><div style="width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;"></div></div>
-        <div class="mono" style="font-size:16px;letter-spacing:3px;color:#fff;">•••• •••• •••• 7734</div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#ccc;"><div id="payCardName">NOM</div><div style="color:#aaa;">12/26</div></div>
+    <div class="pay-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Vigi Pay</div>
+      
+      <!-- État 1 : Carte + Contactless -->
+      <div class="pay-state active" id="stateCard">
+        <div class="terminal-card" id="animCard">
+          <div class="contactless-pulse"></div>
+          <div class="contactless-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 9a3 3 0 010 6M12 6a7 7 0 010 12M15 3a11 11 0 010 18"/></svg>
+          </div>
+          <div style="position:absolute;top:20px;left:20px;font-weight:700;font-size:14px;letter-spacing:1px;color:#fff;">VIGI · EMPLOYÉ</div>
+          <div class="mono" style="font-size:18px;letter-spacing:3px;color:#fff;position:absolute;bottom:60px;left:20px;">•••• 7734</div>
+          <div style="position:absolute;bottom:20px;left:20px;font-size:12px;color:#ccc;" id="payCardName">NOM</div>
+          <div style="position:absolute;bottom:20px;right:20px;font-size:12px;color:#aaa;">12/26</div>
+        </div>
+        <p style="color:#fff;font-weight:600;font-size:16px;">Approchez la carte du terminal</p>
+        <div class="term-dots" id="termDots"><span></span><span></span><span></span></div>
       </div>
-      <p style="margin-top:20px;color:#fff;font-weight:600;">Paiement en cours...</p>
-    </div>
 
-    <!-- État 2 : ACS / Vérification -->
-    <div class="pay-state" id="stateAcs">
-      <div class="loader-ring"></div>
-      <h3 style="margin-top:0;font-size:18px;color:#fff;">Vérification de la transaction</h3>
-      <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Authentification sécurisée en cours...</p>
-    </div>
+      <!-- État 2 : ACS / Vérification -->
+      <div class="pay-state" id="stateAcs">
+        <div class="loader-ring"></div>
+        <h3 style="margin-top:0;font-size:18px;color:#fff;">Vérification de la transaction</h3>
+        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Authentification sécurisée en cours...</p>
+      </div>
 
-    <!-- État 3 : Succès -->
-    <div class="pay-state" id="stateSuccess">
-      <div class="res-circle success">✔</div>
-      <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement validé</h3>
-      <p style="color:var(--muted);margin:10px 0;">Vous avez obtenu : <strong id="successItemName" style="color:var(--accent);"></strong></p>
-      <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
-    </div>
+      <!-- État 3 : Succès -->
+      <div class="pay-state" id="stateSuccess">
+        <div class="res-circle success">✔</div>
+        <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement validé</h3>
+        <p style="color:var(--muted);margin:10px 0;">Vous avez obtenu : <strong id="successItemName" style="color:var(--accent);"></strong></p>
+        <button class="pay-btn" onclick="closePayment()">Terminer</button>
+      </div>
 
-    <!-- État 4 : Échec -->
-    <div class="pay-state" id="stateFail">
-      <div class="res-circle fail">✖</div>
-      <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement refusé</h3>
-      <p style="color:var(--muted);margin:10px 0;" id="failReason">Fonds insuffisants.</p>
-      <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
-    </div>
+      <!-- État 4 : Échec -->
+      <div class="pay-state" id="stateFail">
+        <div class="res-circle fail">✖</div>
+        <h3 style="margin-top:0;font-size:22px;color:#fff;">Paiement refusé</h3>
+        <p style="color:var(--muted);margin:10px 0;" id="failReason">Fonds insuffisants.</p>
+        <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
+      </div>
 
+    </div>
   </div>
 
   <div class="dash-wrap">
@@ -461,7 +497,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
       document.getElementById('tab-' + t).style.display = 'block';
     }
 
-    // Gestion des états de l'animation de paiement
     function setPayState(stateId) {
       document.querySelectorAll('.pay-state').forEach(s => s.classList.remove('active'));
       document.getElementById(stateId).classList.add('active');
@@ -534,31 +569,40 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     }
 
     async function buyItem(itemId) {
-        // 1. Afficher l'overlay et la carte
+        // 1. Faire remonter la feuille de paiement (Apple Pay style)
         document.getElementById('payOverlay').style.display = 'flex';
-        document.getElementById('animCard').classList.add('tapping');
+        document.getElementById('payOverlay').classList.add('active');
+        
+        // 2. Afficher la carte et lancer l'animation de contact (Tapping)
         setPayState('stateCard');
+        document.getElementById('termDots').classList.remove('active');
+        
+        await new Promise(r => setTimeout(r, 400)); // Attendre que la feuille remonte
+        
+        document.getElementById('animCard').classList.add('tapping');
+        document.getElementById('termDots').classList.add('active');
 
-        // Lancer la requête d'achat en arrière-plan
+        // Lancer la requête d'achat en arrière-plan pendant l'animation
         const resPromise = fetch('/api/shop/purchase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ itemId })
         });
 
-        // 2. Attendre 1.8s (effet Contactless)
-        await new Promise(r => setTimeout(r, 1800));
+        // 3. Attendre 2s (effet de lecture de la carte sur le terminal)
+        await new Promise(r => setTimeout(r, 2000));
         document.getElementById('animCard').classList.remove('tapping');
+        document.getElementById('termDots').classList.remove('active');
 
-        // 3. Passer à l'authentification (Loader)
+        // 4. Passer à l'authentification (ACS)
         setPayState('stateAcs');
 
-        // 4. Attendre la réponse de l'API + 1.5s pour l'effet de chargement
+        // 5. Attendre la réponse de l'API + 1.5s pour l'effet de chargement
         const res = await resPromise;
         const data = await res.json();
         await new Promise(r => setTimeout(r, 1500));
 
-        // 5. Afficher le résultat
+        // 6. Afficher le résultat
         if (data.success) {
             userBalance = data.newBalance;
             document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
@@ -572,7 +616,10 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     }
 
     function closePayment() {
-        document.getElementById('payOverlay').style.display = 'none';
+        document.getElementById('payOverlay').classList.remove('active');
+        setTimeout(() => {
+            document.getElementById('payOverlay').style.display = 'none';
+        }, 500);
     }
 
     async function logout() {
