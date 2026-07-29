@@ -1,10 +1,15 @@
 const express = require('express');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+// Stockage temporaire des paiements en attente (en mémoire)
+const pendingPayments = new Map();
 
 module.exports = function(client, dbNova, Economy, ShopItem) {
     const router = express.Router();
     router.use(express.json());
     router.use(express.urlencoded({ extended: true }));
 
+    // Middleware pour protéger le dashboard
     function requireLogin(req, res, next) {
         if (req.session && req.session.bankUserId) {
             next();
@@ -229,7 +234,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 6 : API POUR ACHETER UN ARTICLE (Protégée)
+    // ROUTE 6 : API POUR DÉMARRER UN ACHAT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/purchase', requireLogin, async (req, res) => {
         try {
@@ -244,18 +249,54 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             
             if (userEco.balance < item.price) return res.json({ success: false, message: "Fonds insuffisants." });
 
-            userEco.balance -= item.price;
-            userEco.transactions.push({ amount: -item.price, label: `Achat Boutique: ${item.name}` });
-            await userEco.save();
+            // Créer une transaction en attente
+            const txId = Math.random().toString(36).substring(2, 10);
+            pendingPayments.set(txId, { status: 'pending', userId, itemId });
 
-            res.json({ success: true, newBalance: userEco.balance, itemName: item.name });
+            // Envoyer le DM de validation
+            try {
+                const user = await client.users.fetch(userId);
+                const row = new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder().setCustomId('pay_accept_' + txId).setLabel('✅ Autoriser le paiement').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId('pay_decline_' + txId).setLabel('❌ Refuser').setStyle(ButtonStyle.Danger)
+                    );
+                await user.send({ content: `🔐 **Vigi-Banque - Authentification de paiement**\n\nVous tentez d'acheter **${item.name}** pour **${item.price} 🪙**.\nVeuillez confirmer cette transaction.`, components: [row] });
+            } catch (e) {
+                return res.json({ success: false, message: "DM impossible à envoyer. Veuillez ouvrir vos messages privés." });
+            }
+
+            res.json({ success: true, transactionId: txId });
         } catch (error) {
             res.json({ success: false, message: error.message });
         }
     });
 
     // ----------------------------------------------------
-    // ROUTE 7 : DASHBOARD (Protégé par requireLogin)
+    // ROUTE 7 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
+    // ----------------------------------------------------
+    router.get('/api/shop/check-purchase', requireLogin, async (req, res) => {
+        const txId = req.query.transactionId;
+        const tx = pendingPayments.get(txId);
+        
+        if (!tx) return res.json({ success: false, status: 'expired' });
+        
+        if (tx.status === 'pending') return res.json({ success: true, status: 'pending' });
+        
+        const result = { status: tx.status };
+        if (tx.status === 'approved') {
+            result.newBalance = tx.newBalance;
+            result.itemName = tx.itemName;
+        } else {
+            result.message = tx.message;
+        }
+        
+        pendingPayments.delete(txId); // On nettoie
+        res.json({ success: true, ...result });
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 8 : DASHBOARD (Protégé par requireLogin)
     // ----------------------------------------------------
     router.get('/bank', requireLogin, (req, res) => {
         const html = `
@@ -335,30 +376,17 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   }
   .terminal-card.tapping{transform:scale(1) translateY(-5px);}
   
-  .contactless-icon{
-    position:absolute;top:20px;right:20px;color:rgba(255,255,255,0.8);
-  }
-  .contactless-pulse{
-    position:absolute;top:18px;right:18px;width:30px;height:30px;
-    border:2px solid var(--accent);border-radius:50%;opacity:0;
-  }
-  .terminal-card.tapping .contactless-pulse{
-    animation:pulseRing 1.5s infinite;
-  }
-  @keyframes pulseRing{
-    0% {transform:scale(0.8);opacity:0.8;}
-    100%{transform:scale(2.5);opacity:0;}
-  }
+  .contactless-icon{position:absolute;top:20px;right:20px;color:rgba(255,255,255,0.8);}
+  .contactless-pulse{position:absolute;top:18px;right:18px;width:30px;height:30px;border:2px solid var(--accent);border-radius:50%;opacity:0;}
+  .terminal-card.tapping .contactless-pulse{animation:pulseRing 1.5s infinite;}
+  @keyframes pulseRing{0% {transform:scale(0.8);opacity:0.8;}100%{transform:scale(2.5);opacity:0;}}
 
   .term-dots{display:flex;gap:8px;justify-content:center;margin-top:10px;}
   .term-dots span{width:8px;height:8px;border-radius:50%;background:#444;}
   .term-dots.active span{animation:dotBlink 1.2s infinite both;}
   .term-dots span:nth-child(2){animation-delay:0.2s;}
   .term-dots span:nth-child(3){animation-delay:0.4s;}
-  @keyframes dotBlink{
-    0%, 100% {background:#444;}
-    50% {background:var(--accent);box-shadow:0 0 10px var(--accent);}
-  }
+  @keyframes dotBlink{0%, 100% {background:#444;}50% {background:var(--accent);box-shadow:0 0 10px var(--accent);}}
 
   /* Cercle de chargement (Loader) */
   .loader-ring{
@@ -376,6 +404,8 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   @keyframes popIn{from{transform:scale(0);}to{transform:scale(1);}}
 
   .pay-btn{margin-top:25px;background:var(--surface2);color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;border:1px solid var(--border);width:100%;}
+  
+  .discord-notify{display:inline-flex;align-items:center;gap:8px;color:#5865F2;font-weight:600;margin-top:10px;}
 </style>
 </head>
 <body>
@@ -387,7 +417,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     <button onclick="logout()" style="margin-top:30px;background:var(--surface2);padding:12px 24px;border-radius:10px;font-weight:600;color:#fff;">Se déconnecter</button>
   </div>
 
-  <!-- ÉCRAN DE PAIEMENT (APPLE PAY / TERMINAL) -->
+  <!-- ÉCRAN DE PAIEMENT -->
   <div class="pay-overlay" id="payOverlay">
     <div class="pay-sheet">
       <div class="sheet-handle"></div>
@@ -409,11 +439,15 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <div class="term-dots" id="termDots"><span></span><span></span><span></span></div>
       </div>
 
-      <!-- État 2 : ACS / Vérification -->
+      <!-- État 2 : ACS / Vérification Discord -->
       <div class="pay-state" id="stateAcs">
         <div class="loader-ring"></div>
-        <h3 style="margin-top:0;font-size:18px;color:#fff;">Vérification de la transaction</h3>
-        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Authentification sécurisée en cours...</p>
+        <h3 style="margin-top:0;font-size:18px;color:#fff;">Validation requise</h3>
+        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Veuillez confirmer le paiement dans vos messages privés Discord...</p>
+        <div class="discord-notify">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+          En attente de validation Discord
+        </div>
       </div>
 
       <!-- État 3 : Succès -->
@@ -569,11 +603,11 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     }
 
     async function buyItem(itemId) {
-        // 1. Faire remonter la feuille de paiement (Apple Pay style)
+        // 1. Faire remonter la feuille de paiement
         document.getElementById('payOverlay').style.display = 'flex';
         document.getElementById('payOverlay').classList.add('active');
         
-        // 2. Afficher la carte et lancer l'animation de contact (Tapping)
+        // 2. Afficher la carte et lancer l'animation de contact
         setPayState('stateCard');
         document.getElementById('termDots').classList.remove('active');
         
@@ -582,37 +616,54 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         document.getElementById('animCard').classList.add('tapping');
         document.getElementById('termDots').classList.add('active');
 
-        // Lancer la requête d'achat en arrière-plan pendant l'animation
-        const resPromise = fetch('/api/shop/purchase', {
+        // 3. Appeler l'API pour envoyer le DM Discord
+        const res = await fetch('/api/shop/purchase', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ itemId })
         });
+        const data = await res.json();
 
-        // 3. Attendre 2s (effet de lecture de la carte sur le terminal)
-        await new Promise(r => setTimeout(r, 2000));
+        // 4. Attendre 1.5s (fin de l'animation de lecture de la carte)
+        await new Promise(r => setTimeout(r, 1500));
         document.getElementById('animCard').classList.remove('tapping');
         document.getElementById('termDots').classList.remove('active');
 
-        // 4. Passer à l'authentification (ACS)
-        setPayState('stateAcs');
-
-        // 5. Attendre la réponse de l'API + 1.5s pour l'effet de chargement
-        const res = await resPromise;
-        const data = await res.json();
-        await new Promise(r => setTimeout(r, 1500));
-
-        // 6. Afficher le résultat
-        if (data.success) {
-            userBalance = data.newBalance;
-            document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
-            document.getElementById('successItemName').innerText = data.itemName;
-            setPayState('stateSuccess');
-            loadData(); // Rafraîchir l'historique
-        } else {
-            document.getElementById('failReason').innerText = data.message || "Une erreur est survenue.";
+        if (!data.success) {
+            document.getElementById('failReason').innerText = data.message || "Erreur lors de l'envoi du DM.";
             setPayState('stateFail');
+            return;
         }
+
+        // 5. Passer à l'authentification (ACS) et commencer à vérifier le statut
+        setPayState('stateAcs');
+        
+        let pollCount = 0;
+        const pollInterval = setInterval(async () => {
+            pollCount++;
+            if (pollCount > 60) { // 2 minutes d'attente max
+                clearInterval(pollInterval);
+                document.getElementById('failReason').innerText = "Délai d'attente dépassé.";
+                setPayState('stateFail');
+                return;
+            }
+
+            const checkRes = await fetch('/api/shop/check-purchase?transactionId=' + data.transactionId);
+            const checkData = await checkRes.json();
+
+            if (checkData.status === 'approved') {
+                clearInterval(pollInterval);
+                userBalance = checkData.newBalance;
+                document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
+                document.getElementById('successItemName').innerText = checkData.itemName;
+                setPayState('stateSuccess');
+                loadData(); // Rafraîchir l'historique
+            } else if (checkData.status === 'declined' || checkData.status === 'expired') {
+                clearInterval(pollInterval);
+                document.getElementById('failReason').innerText = checkData.message || "Paiement refusé.";
+                setPayState('stateFail');
+            }
+        }, 2000); // Vérifie toutes les 2 secondes
     }
 
     function closePayment() {
@@ -631,6 +682,52 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 </body>
 </html>`;
         res.send(html);
+    });
+
+    // ----------------------------------------------------
+    // GESTIONNAIRE DE BOUTONS DISCORD (DM Validation)
+    // ----------------------------------------------------
+    client.on('interactionCreate', async (interaction) => {
+        if (!interaction.isButton()) return;
+
+        if (interaction.customId.startsWith('pay_accept_') || interaction.customId.startsWith('pay_decline_')) {
+            const txId = interaction.customId.split('_')[2];
+            const tx = pendingPayments.get(txId);
+
+            if (!tx) {
+                return interaction.update({ content: "Session de paiement expirée.", components: [] }).catch(()=>{});
+            }
+            if (tx.userId !== interaction.user.id) {
+                return interaction.reply({ content: "Ce n'est pas votre paiement.", ephemeral: true });
+            }
+
+            if (interaction.customId.startsWith('pay_accept_')) {
+                // Traitement du paiement
+                const userEco = await Economy.findOne({ userId: tx.userId });
+                const item = await ShopItem.findById(tx.itemId);
+
+                if (!userEco || !item || userEco.balance < item.price) {
+                    tx.status = 'declined';
+                    tx.message = "Fonds insuffisants ou erreur.";
+                    await interaction.update({ content: `❌ **Paiement refusé**\nRaison : Fonds insuffisants.`, components: [] });
+                    return;
+                }
+
+                userEco.balance -= item.price;
+                userEco.transactions.push({ amount: -item.price, label: `Achat Boutique: ${item.name}` });
+                await userEco.save();
+
+                tx.status = 'approved';
+                tx.newBalance = userEco.balance;
+                tx.itemName = item.name;
+
+                await interaction.update({ content: `✅ **Paiement validé**\nVous avez obtenu : **${item.name}**\nNouveau solde : ${userEco.balance} 🪙`, components: [] });
+            } else {
+                tx.status = 'declined';
+                tx.message = "Paiement refusé par l'utilisateur.";
+                await interaction.update({ content: `❌ **Paiement refusé**\nVous avez annulé la transaction.`, components: [] });
+            }
+        }
     });
 
     return router;
