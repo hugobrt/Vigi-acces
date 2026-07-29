@@ -396,8 +396,20 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     border-top:5px solid var(--accent);
     animation:spin 1s linear infinite;margin:0 auto 20px;
   }
-  .loader-ring.gold{border-top-color:#FFD700;}
   @keyframes spin{100%{transform:rotate(360deg);}}
+
+  /* Animation Transfert Données (Banque) */
+  .wifi-signal{position:relative;width:100px;height:100px;margin:0 auto 24px;display:flex;justify-content:center;align-items:flex-end;}
+  .wifi-dot{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),#005a4a);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;z-index:2;box-shadow:0 0 15px var(--accent);}
+  .wifi-arc{position:absolute;bottom:18px;border:4px solid transparent;border-top-color:rgba(255,255,255,0.8);border-radius:50%;opacity:0;transform-origin:bottom center;}
+  .wifi-arc.arc1{width:50px;height:50px;animation:wifiPulse 1.5s infinite ease-out;}
+  .wifi-arc.arc2{width:75px;height:75px;animation:wifiPulse 1.5s infinite ease-out 0.4s;}
+  .wifi-arc.arc3{width:100px;height:100px;animation:wifiPulse 1.5s infinite ease-out 0.8s;}
+  @keyframes wifiPulse{
+    0%{opacity:0;transform:scale(0.7);}
+    50%{opacity:0.9;}
+    100%{opacity:0;transform:scale(1.3);}
+  }
 
   /* Succès / Échec */
   .res-circle{width:80px;height:80px;border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:40px;color:#000;font-weight:bold;animation:popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);}
@@ -454,16 +466,21 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Validation requise</h3>
         <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Veuillez confirmer le paiement dans vos messages privés Discord...</p>
         <div class="discord-notify">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.010c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
           En attente de validation Discord
         </div>
       </div>
 
-      <!-- État 2.5 : Contact Banque -->
+      <!-- État 2.5 : Contact Banque (Transfert de données) -->
       <div class="pay-state" id="stateContactBank">
-        <div class="loader-ring gold"></div>
+        <div class="wifi-signal">
+            <div class="wifi-arc arc1"></div>
+            <div class="wifi-arc arc2"></div>
+            <div class="wifi-arc arc3"></div>
+            <div class="wifi-dot">🏦</div>
+        </div>
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Contact établissement bancaire</h3>
-        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Connexion sécurisée à Vigi-Banque en cours...</p>
+        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Transfert de données sécurisé en cours...</p>
       </div>
 
       <!-- État 3 : Succès -->
@@ -675,7 +692,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             if (checkData.status === 'approved') {
                 clearInterval(pollInterval);
                 
-                // Étape Contact Banque
+                // Étape Contact Banque (Transfert de données)
                 setPayState('stateContactBank');
                 await new Promise(r => setTimeout(r, 2500)); // 2.5s d'attente simulant le contact banque
                 
