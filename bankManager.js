@@ -238,7 +238,42 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 6 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
+    // ROUTE 6 : API POUR VIREMENT (Protégée)
+    // ----------------------------------------------------
+    router.post('/api/bank/transfer', requireLogin, async (req, res) => {
+        try {
+            const { recipientIdentifier, amount } = req.body;
+            const senderId = req.session.bankUserId;
+
+            const senderEco = await Economy.findOne({ userId: String(senderId) });
+            if (!senderEco) return res.json({ success: false, message: "Compte expéditeur introuvable." });
+
+            const cleanIdent = recipientIdentifier ? recipientIdentifier.trim().toLowerCase() : null;
+            if (senderEco.bankIdentifier === cleanIdent) return res.json({ success: false, message: "Vous ne pouvez pas vous envoyer d'argent à vous-même." });
+
+            const recipientEco = await Economy.findOne({ bankIdentifier: cleanIdent });
+            if (!recipientEco) return res.json({ success: false, message: "Destinataire introuvable. Vérifiez l'identifiant." });
+
+            const amt = parseInt(amount);
+            if (isNaN(amt) || amt <= 0) return res.json({ success: false, message: "Montant invalide." });
+            if (senderEco.balance < amt) return res.json({ success: false, message: "Fonds insuffisants." });
+
+            senderEco.balance -= amt;
+            senderEco.transactions.push({ amount: -amt, label: `Virement à ${cleanIdent}` });
+            await senderEco.save();
+
+            recipientEco.balance += amt;
+            recipientEco.transactions.push({ amount: amt, label: `Virement de ${senderEco.bankIdentifier}` });
+            await recipientEco.save();
+
+            res.json({ success: true, newBalance: senderEco.balance });
+        } catch (error) {
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 7 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/items', requireLogin, async (req, res) => {
         try {
@@ -250,7 +285,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 7 : API POUR DÉMARRER UN ACHAT (Protégée)
+    // ROUTE 8 : API POUR DÉMARRER UN ACHAT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/purchase', requireLogin, async (req, res) => {
         try {
@@ -287,7 +322,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 8 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
+    // ROUTE 9 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/check-purchase', requireLogin, async (req, res) => {
         const txId = req.query.transactionId;
@@ -310,7 +345,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 9 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
+    // ROUTE 10 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/request-refund', requireLogin, async (req, res) => {
         try {
@@ -349,7 +384,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 10 : DASHBOARD (Protégé par requireLogin)
+    // ROUTE 11 : DASHBOARD (Protégé par requireLogin)
     // ----------------------------------------------------
     router.get('/bank', requireLogin, (req, res) => {
         const html = `
@@ -466,6 +501,19 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .style-ocean{background:linear-gradient(135deg, #2980b9, #6dd5fa);}
   .style-sunset{background:linear-gradient(135deg, #dd2476, #ff512f);}
   .style-gold{background:linear-gradient(135deg, #bf953f, #fcf6ba, #aa771c);}
+
+  .form-control{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;color:#fff;font-size:16px;outline:none;transition:border .2s;margin-bottom:16px;}
+  .form-control:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);}
+
+  /* KEYPAD PIN */
+  .pin-display{font-family:'IBM Plex Mono',monospace;font-size:36px;color:var(--accent);letter-spacing:12px;text-align:center;margin-bottom:20px;background:rgba(0,224,176,0.1);padding:10px;border-radius:8px;}
+  .pin-dots{display:flex;justify-content:center;gap:15px;margin-bottom:30px;}
+  .pin-dots span{width:14px;height:14px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);transition:all 0.2s;}
+  .pin-dots span.filled{background:var(--accent);box-shadow:0 0 10px var(--accent);border-color:var(--accent);}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto;}
+  .keypad-btn{background:var(--surface2);border:1px solid var(--border);color:#fff;font-size:22px;font-weight:600;padding:15px 0;border-radius:12px;cursor:pointer;transition:all 0.15s;}
+  .keypad-btn:active{transform:scale(0.95);background:var(--accent);color:#000;}
+  .keypad-btn.action{background:transparent;color:var(--muted);}
 </style>
 </head>
 <body>
@@ -545,6 +593,28 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <button class="pay-btn" onclick="closePayment()">Fermer</button>
       </div>
 
+      <!-- ÉTAT VIREMENT (CAPTCHA PIN) -->
+      <div class="pay-state" id="stateTransferPin">
+        <h3 style="margin-top:0;font-size:18px;color:#fff;">Validation de sécurité</h3>
+        <p style="color:var(--muted);margin:10px 0 20px 0;font-size:14px;">Saisissez le code de confirmation :</p>
+        <div class="pin-display" id="pinCodeDisplay">0000</div>
+        <div class="pin-dots" id="pinDots"><span></span><span></span><span></span><span></span></div>
+        <div class="keypad">
+            <button class="keypad-btn" onclick="typePin(1)">1</button>
+            <button class="keypad-btn" onclick="typePin(2)">2</button>
+            <button class="keypad-btn" onclick="typePin(3)">3</button>
+            <button class="keypad-btn" onclick="typePin(4)">4</button>
+            <button class="keypad-btn" onclick="typePin(5)">5</button>
+            <button class="keypad-btn" onclick="typePin(6)">6</button>
+            <button class="keypad-btn" onclick="typePin(7)">7</button>
+            <button class="keypad-btn" onclick="typePin(8)">8</button>
+            <button class="keypad-btn" onclick="typePin(9)">9</button>
+            <button class="keypad-btn action" onclick="resetPin()">C</button>
+            <button class="keypad-btn" onclick="typePin(0)">0</button>
+            <button class="keypad-btn action" onclick="closePayment()">✖</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -554,6 +624,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
       <nav class="side-nav">
         <a class="active" onclick="switchTab('home')">Accueil</a>
         <a onclick="switchTab('shop')">Boutique</a>
+        <a onclick="switchTab('transfer')">Virement</a>
         <a onclick="switchTab('card')">Carte</a>
       </nav>
       <div class="side-user"><div class="avatar" id="sideAvatar">U</div><div><b id="sideName">Employé</b><span id="sidePlan" style="font-size:11px;color:var(--muted);">Compte</span></div></div>
@@ -595,6 +666,21 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
          </div>
       </div>
 
+      <div id="tab-transfer" class="tab-content" style="display:none;">
+         <div class="topbar"><div><h1>Virement</h1><div style="font-size:13px;color:var(--muted);margin-top:4px;">Envoyez des Vigi-Coins à un autre employé</div></div></div>
+         <div class="card" style="max-width:500px;margin:0 auto;">
+            <div style="margin-bottom:16px;">
+                <label style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px;">Identifiant du destinataire</label>
+                <input type="text" id="transferRecipient" class="form-control" placeholder="ex: jean.dupont">
+            </div>
+            <div style="margin-bottom:24px;">
+                <label style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px;">Montant (Vigi-Coins)</label>
+                <input type="number" id="transferAmount" class="form-control" placeholder="ex: 500">
+            </div>
+            <button onclick="startTransfer()" class="btn-primary" style="width:100%;background:var(--accent);color:#000;font-weight:700;padding:16px;border-radius:12px;font-size:15px;cursor:pointer;border:none;">Envoyer le virement</button>
+         </div>
+      </div>
+
       <div id="tab-card" class="tab-content" style="display:none;">
          <div class="topbar"><div><h1>Personnalisation</h1><div style="font-size:13px;color:var(--muted);margin-top:4px;">Choisissez le design de votre carte</div></div></div>
          <div class="card">
@@ -621,6 +707,10 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   <script>
     let userBalance = 0;
     let currentCardStyle = 'dark';
+    let currentCaptcha = '';
+    let typedPin = '';
+    let transferData = {};
+
     const styles = {
         dark: 'linear-gradient(135deg, #1C1F26, #0d0f12)',
         mint: 'linear-gradient(135deg, #005a4a, #00E0B0)',
@@ -644,9 +734,11 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
       document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
       document.getElementById('tab-' + t).style.display = 'block';
       document.querySelectorAll('.side-nav a').forEach(a => a.classList.remove('active'));
-      if(t === 'home') document.querySelectorAll('.side-nav a')[0].classList.add('active');
-      if(t === 'shop') document.querySelectorAll('.side-nav a')[1].classList.add('active');
-      if(t === 'card') document.querySelectorAll('.side-nav a')[2].classList.add('active');
+      const navLinks = document.querySelectorAll('.side-nav a');
+      if(t === 'home') navLinks[0].classList.add('active');
+      if(t === 'shop') navLinks[1].classList.add('active');
+      if(t === 'transfer') navLinks[2].classList.add('active');
+      if(t === 'card') navLinks[3].classList.add('active');
     }
 
     function setPayState(stateId) {
@@ -738,6 +830,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         grid.innerHTML = h;
     }
 
+    // --- ACHAT ---
     async function buyItem(itemId) {
         document.getElementById('sheetTitle').innerText = "Vigi Pay";
         document.getElementById('successTitle').innerText = "Paiement validé";
@@ -800,6 +893,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         }, 2000); 
     }
 
+    // --- REMBOURSEMENT ---
     async function requestRefund(txId) {
         document.getElementById('sheetTitle').innerText = "Demande de Remboursement";
         document.getElementById('payOverlay').style.display = 'flex';
@@ -820,6 +914,95 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         } else {
             document.getElementById('failTitle').innerText = "Erreur";
             document.getElementById('failReason').innerText = data.message || "Erreur lors de la demande.";
+            setPayState('stateFail');
+        }
+    }
+
+    // --- VIREMENT ---
+    function startTransfer() {
+        const recipient = document.getElementById('transferRecipient').value.trim();
+        const amount = document.getElementById('transferAmount').value;
+
+        if (!recipient || !amount || amount <= 0) {
+            alert("Veuillez remplir l'identifiant et un montant valide.");
+            return;
+        }
+
+        transferData = { recipient, amount };
+
+        // Générer un code CAPTCHA à 4 chiffres
+        currentCaptcha = Math.floor(1000 + Math.random() * 9000).toString();
+        document.getElementById('pinCodeDisplay').innerText = currentCaptcha;
+        typedPin = '';
+        updatePinDots();
+
+        document.getElementById('sheetTitle').innerText = "Virement Sécurisé";
+        document.getElementById('successTitle').innerText = "Virement effectué";
+        document.getElementById('failTitle').innerText = "Virement refusé";
+        document.getElementById('recapPriceLabel').innerText = "Montant";
+        document.getElementById('recapBox').style.display = 'block';
+        document.getElementById('redirectText').style.display = 'none'; // Pas de redirection auto pour un virement
+
+        document.getElementById('payOverlay').style.display = 'flex';
+        document.getElementById('payOverlay').classList.add('active');
+        setPayState('stateTransferPin');
+    }
+
+    function typePin(num) {
+        if (typedPin.length < 4) {
+            typedPin += num;
+            updatePinDots();
+        }
+        if (typedPin.length === 4) {
+            setTimeout(() => {
+                if (typedPin === currentCaptcha) {
+                    executeTransfer();
+                } else {
+                    document.getElementById('failTitle').innerText = "Code incorrect";
+                    document.getElementById('failReason').innerText = "Le code de sécurité saisi est invalide.";
+                    setPayState('stateFail');
+                }
+            }, 300);
+        }
+    }
+
+    function resetPin() {
+        typedPin = '';
+        updatePinDots();
+    }
+
+    function updatePinDots() {
+        const dots = document.getElementById('pinDots').children;
+        for (let i = 0; i < 4; i++) {
+            if (i < typedPin.length) {
+                dots[i].classList.add('filled');
+            } else {
+                dots[i].classList.remove('filled');
+            }
+        }
+    }
+
+    async function executeTransfer() {
+        setPayState('stateContactBank');
+        await new Promise(r => setTimeout(r, 2500));
+
+        const res = await fetch('/api/bank/transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(transferData)
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            userBalance = data.newBalance;
+            document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
+            document.getElementById('recapItemName').innerText = transferData.recipient;
+            document.getElementById('recapItemPrice').innerText = '- ' + transferData.amount + ' 🪙';
+            document.getElementById('recapBalance').innerText = userBalance.toLocaleString('fr-FR') + ' 🪙';
+            setPayState('stateSuccess');
+            loadData(); // Rafraîchir l'historique
+        } else {
+            document.getElementById('failReason').innerText = data.message || "Erreur lors du virement.";
             setPayState('stateFail');
         }
     }
