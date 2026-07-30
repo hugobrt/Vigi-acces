@@ -12,11 +12,12 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configuration des sessions (Pour garder la connexion de la banque active)
 app.use(session({
     secret: process.env.SECRET_KEY || 'vigi-super-secret-key',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 }
+    cookie: { maxAge: 24 * 60 * 60 * 1000 } // Reste connecté 24h
 }));
 
 const client = new Client({
@@ -39,6 +40,7 @@ mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log("🟢 Connecté à MongoDB (Vigi-Access Économie) !"))
     .catch(err => console.error("🔴 Erreur de connexion MongoDB :", err));
 
+// Base de données Vigi (Économie, Banque, Transactions, Style de carte)
 const EconomySchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
     balance: { type: Number, default: 0 },
@@ -46,6 +48,7 @@ const EconomySchema = new mongoose.Schema({
     bankCode: { type: String, default: null },
     bankIdentifier: { type: String, default: null },
     bankFrozen: { type: Boolean, default: false },
+    cardStyle: { type: String, default: 'dark' }, // NOUVEAU : Style de la carte bancaire
     transactions: [{
         amount: Number,
         label: String,
@@ -54,7 +57,7 @@ const EconomySchema = new mongoose.Schema({
 });
 const Economy = mongoose.model('Economy', EconomySchema);
 
-// NOUVEAU : Modèle pour les articles de la boutique
+// Base de données des articles de la boutique
 const ShopItemSchema = new mongoose.Schema({
     name: { type: String, required: true },
     description: { type: String, required: true },
@@ -68,6 +71,7 @@ dbNova.connect().then(() => {
     console.log("🟢 Connecté à la BDD de Nova-Bot (Employés) !");
 }).catch(err => console.error("🔴 Erreur BDD Nova :", err));
 
+// Configuration
 let config = {
     guildId: process.env.GUILD_ID || '',
     channelId: process.env.CHANNEL_ID || '',
@@ -86,7 +90,7 @@ let config = {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/', embedBuilderRoute(client));
-// On passe ShopItem aux routeurs
+// On passe les modèles Economy et ShopItem aux routeurs
 app.use('/', economyManagerRoute(client, dbNova, Economy, ShopItem));
 app.use('/', bankManagerRoute(client, dbNova, Economy, ShopItem));
 
@@ -199,6 +203,7 @@ app.get('/', (req, res) => {
             ::-webkit-scrollbar-thumb { background: #5865F2; border-radius: 4px; }
             .wrapper { width: 100%; max-width: 800px; }
             .glass-card { background: rgba(35, 37, 42, 0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 24px; padding: 40px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5); margin-bottom: 32px; transition: transform 0.3s ease, box-shadow 0.3s ease; }
+            .glass-card:hover { transform: translateY(-3px); box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6); border: 1px solid rgba(88, 101, 242, 0.2); }
             h1 { font-size: 32px; font-weight: 800; margin: 0 0 20px 0; background: linear-gradient(90deg, #ffffff, #b5bac1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 20px; }
             h2 { font-size: 20px; font-weight: 600; margin: 0 0 24px 0; color: #ffffff; display: flex; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 1px; }
             .status-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: rgba(45, 199, 112, 0.1); border: 1px solid rgba(45, 199, 112, 0.3); border-radius: 50px; color: #2dc770; font-size: 14px; font-weight: 600; margin-bottom: 30px; width: fit-content; }
