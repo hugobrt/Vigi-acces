@@ -4,39 +4,6 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const pendingPayments = new Map();
 const pendingRefunds = new Map();
 
-// Générateur de CAPTCHA visuel (SVG)
-function generateCaptchaSVG() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let text = '';
-    for(let i=0; i<5; i++) text += chars[Math.floor(Math.random() * chars.length)];
-    
-    let svg = `<svg width="250" height="80" xmlns="http://www.w3.org/2000/svg">`;
-    svg += `<rect width="100%" height="100%" fill="#f0f0f0" />`;
-    
-    // Lignes de bruit
-    for(let i=0; i<8; i++) {
-        svg += `<line x1="${Math.random()*250}" y1="${Math.random()*80}" x2="${Math.random()*250}" y2="${Math.random()*80}" stroke="rgba(0,0,0,0.3)" stroke-width="2"/>`;
-    }
-    
-    // Texte déformé
-    let x = 25;
-    for(let i=0; i<text.length; i++) {
-        const y = 50 + Math.random() * 10 - 5;
-        const rot = Math.random() * 25 - 25;
-        const color = ['#005a4a', '#2980b9', '#dd2476', '#000000'][Math.floor(Math.random()*4)];
-        svg += `<text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="${color}" transform="rotate(${rot} ${x} ${y})">${text[i]}</text>`;
-        x += 40;
-    }
-    
-    // Points de bruit
-    for(let i=0; i<40; i++) {
-        svg += `<circle cx="${Math.random()*250}" cy="${Math.random()*80}" r="2" fill="rgba(0,0,0,0.4)"/>`;
-    }
-    svg += `</svg>`;
-    
-    return { svg: Buffer.from(svg).toString('base64'), text };
-}
-
 module.exports = function(client, dbNova, Economy, ShopItem) {
     const router = express.Router();
     router.use(express.json());
@@ -271,36 +238,26 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 6 : API POUR VIREMENT (Protégée + CAPTCHA)
+    // ROUTE 6 : API POUR VIREMENT (Protégée)
     // ----------------------------------------------------
     router.post('/api/bank/transfer', requireLogin, async (req, res) => {
         try {
-            const { recipientIdentifier, amount, captcha } = req.body;
+            const { recipientIdentifier, amount } = req.body;
             const senderId = req.session.bankUserId;
 
-            // 1. Vérifier le CAPTCHA
-            if (!req.session.captchaText || captcha.toUpperCase() !== req.session.captchaText) {
-                return res.json({ success: false, message: "Code CAPTCHA invalide." });
-            }
-            delete req.session.captchaText; // Utilisé une seule fois
-
-            // 2. Vérifier l'expéditeur
             const senderEco = await Economy.findOne({ userId: String(senderId) });
             if (!senderEco) return res.json({ success: false, message: "Compte expéditeur introuvable." });
 
-            // 3. Vérifier le destinataire
             const cleanIdent = recipientIdentifier ? recipientIdentifier.trim().toLowerCase() : null;
             if (senderEco.bankIdentifier === cleanIdent) return res.json({ success: false, message: "Vous ne pouvez pas vous envoyer d'argent à vous-même." });
 
             const recipientEco = await Economy.findOne({ bankIdentifier: cleanIdent });
             if (!recipientEco) return res.json({ success: false, message: "Destinataire introuvable. Vérifiez l'identifiant." });
 
-            // 4. Vérifier le montant
             const amt = parseInt(amount);
             if (isNaN(amt) || amt <= 0) return res.json({ success: false, message: "Montant invalide." });
             if (senderEco.balance < amt) return res.json({ success: false, message: "Fonds insuffisants." });
 
-            // 5. Effectuer le virement
             senderEco.balance -= amt;
             senderEco.transactions.push({ amount: -amt, label: `Virement à ${cleanIdent}` });
             await senderEco.save();
@@ -316,16 +273,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 7 : API POUR GÉNÉRER UN CAPTCHA (Protégée)
-    // ----------------------------------------------------
-    router.get('/api/bank/captcha', requireLogin, (req, res) => {
-        const { svg, text } = generateCaptchaSVG();
-        req.session.captchaText = text;
-        res.json({ success: true, svg: `data:image/svg+xml;base64,${svg}` });
-    });
-
-    // ----------------------------------------------------
-    // ROUTE 8 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
+    // ROUTE 7 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/items', requireLogin, async (req, res) => {
         try {
@@ -337,7 +285,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 9 : API POUR DÉMARRER UN ACHAT (Protégée)
+    // ROUTE 8 : API POUR DÉMARRER UN ACHAT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/purchase', requireLogin, async (req, res) => {
         try {
@@ -374,7 +322,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 10 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
+    // ROUTE 9 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/check-purchase', requireLogin, async (req, res) => {
         const txId = req.query.transactionId;
@@ -397,7 +345,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 11 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
+    // ROUTE 10 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/request-refund', requireLogin, async (req, res) => {
         try {
@@ -436,7 +384,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 12 : DASHBOARD (Protégé par requireLogin)
+    // ROUTE 11 : DASHBOARD (Protégé par requireLogin)
     // ----------------------------------------------------
     router.get('/bank', requireLogin, (req, res) => {
         const html = `
@@ -559,20 +507,29 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .form-control{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;color:#fff;font-size:16px;outline:none;transition:border .2s;margin-bottom:16px;}
   .form-control:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);}
   
-  /* CAPTCHA STYLE (reCAPTCHA like) */
-  .captcha-container{background:#fff;border-radius:8px;padding:15px;display:flex;flex-direction:column;align-items:center;gap:15px;margin-bottom:20px;}
-  .captcha-box{display:flex;align-items:center;gap:15px;width:100%;}
-  .captcha-checkbox{width:28px;height:28px;border:2px solid #d0d0d0;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
-  .captcha-checkbox.checked{border-color:var(--accent);background:var(--accent);}
-  .captcha-checkbox.checked svg{width:20px;height:20px;color:#000;}
-  .captcha-label{color:#000;font-size:14px;font-family:Arial, sans-serif;}
-  .captcha-brand{text-align:right;}
-  .captcha-brand b{font-size:10px;color:#555;display:block;line-height:1;}
-  .captcha-brand span{font-size:8px;color:#888;}
-  .captcha-challenge{display:none;width:100%;flex-direction:column;align-items:center;gap:10px;}
-  .captcha-challenge.active{display:flex;}
-  .captcha-img{background:#f0f0f0;border-radius:4px;}
-  .captcha-input{text-transform:uppercase;letter-spacing:4px;text-align:center;font-weight:bold;font-size:18px;color:#000;background:#f9f9f9;border:1px solid #ccc;border-radius:4px;padding:10px;width:150px;}
+  /* KEYPAD PIN (Virement) */
+  .pin-display{font-family:'IBM Plex Mono',monospace;font-size:36px;color:var(--accent);letter-spacing:12px;text-align:center;margin-bottom:20px;background:rgba(0,224,176,0.1);padding:10px;border-radius:8px;}
+  .pin-dots{display:flex;justify-content:center;gap:15px;margin-bottom:30px;}
+  .pin-dots span{width:14px;height:14px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);transition:all 0.2s;}
+  .pin-dots span.filled{background:var(--accent);box-shadow:0 0 10px var(--accent);border-color:var(--accent);}
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto;}
+  .keypad-btn{background:var(--surface2);border:1px solid var(--border);color:#fff;font-size:22px;font-weight:600;padding:15px 0;border-radius:12px;cursor:pointer;transition:all 0.15s;}
+  .keypad-btn:active{transform:scale(0.95);background:var(--accent);color:#000;}
+  .keypad-btn.action{background:transparent;color:var(--muted);}
+
+  /* ANIMATIONS VIREMENT (Exclusives) */
+  .encrypt-box { width: 100px; height: 100px; margin: 0 auto 24px; position: relative; display: flex; align-items: center; justify-content: center; }
+  .encrypt-shield { width: 70px; height: 70px; background: var(--surface2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; z-index: 2; border: 2px solid var(--accent); color: var(--accent); }
+  .encrypt-ring { position: absolute; width: 100px; height: 100px; border: 2px solid var(--accent); border-radius: 50%; opacity: 0; animation: encryptPulse 1.5s infinite; }
+  .encrypt-ring.delay { animation-delay: 0.5s; }
+  @keyframes encryptPulse { 0% { transform: scale(0.7); opacity: 0.8; } 100% { transform: scale(1.4); opacity: 0; } }
+
+  .transfer-flow { display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 280px; margin: 0 auto 30px; }
+  .flow-icon { width: 50px; height: 50px; background: var(--surface2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 1px solid var(--border); color: #fff; }
+  .flow-line { flex: 1; height: 2px; background: var(--border); margin: 0 10px; position: relative; overflow: hidden; }
+  .flow-packet { position: absolute; top: -4px; left: 0; width: 10px; height: 10px; background: var(--accent); border-radius: 50%; animation: packetMove 1.5s infinite linear; box-shadow: 0 0 10px var(--accent); }
+  @keyframes packetMove { 0% { left: 0; } 100% { left: 100%; } }
+
 </style>
 </head>
 <body>
@@ -588,6 +545,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="sheetTitle">Vigi Pay</div>
       
+      <!-- ACHAT STATES -->
       <div class="pay-state active" id="stateCard">
         <div class="terminal-card" id="animCard">
           <div class="contactless-pulse"></div>
@@ -633,6 +591,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
       </div>
 
+      <!-- REFUND STATES -->
       <div class="pay-state" id="stateRefundScan">
         <div class="scan-area"><div class="receipt"><div class="receipt-line"></div><div class="receipt-line"></div><div class="receipt-line"></div><div class="receipt-total"></div><div class="receipt-line"></div><div class="receipt-line"></div></div><div class="scan-laser"></div></div>
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Analyse du ticket</h3>
@@ -652,31 +611,62 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <button class="pay-btn" onclick="closePayment()">Fermer</button>
       </div>
 
-      <!-- ÉTAT VIREMENT (CAPTCHA reCAPTCHA style) -->
-      <div class="pay-state" id="stateTransferCaptcha">
-        <h3 style="margin-top:0;font-size:18px;color:#fff;margin-bottom:20px;">Vérification de sécurité</h3>
-        
-        <div class="captcha-container">
-            <div class="captcha-box" id="captchaCheckboxBox" onclick="toggleCaptchaChallenge()">
-                <div class="captcha-checkbox" id="captchaCheckbox"></div>
-                <div class="captcha-label">Je ne suis pas un robot</div>
-                <div class="captcha-brand" style="margin-left:auto;">
-                    <b>reCAPTCHA</b>
-                    <span>Privacy - Terms</span>
-                </div>
-            </div>
-            
-            <div class="captcha-challenge" id="captchaChallengeBox">
-                <img id="captchaImg" src="" alt="Captcha" class="captcha-img" width="250" height="80">
-                <div style="display:flex;gap:10px;align-items:center;">
-                    <input type="text" id="captchaInput" class="captcha-input" placeholder="Code" maxlength="5">
-                    <button onclick="loadCaptcha()" style="background:none;border:none;color:#555;cursor:pointer;font-size:18px;">🔄</button>
-                </div>
-                <button class="pay-btn success" style="margin-top:10px;" onclick="executeTransfer()">Valider le virement</button>
-            </div>
+      <!-- TRANSFER STATES (VIREMENT EXCLUSIF) -->
+      
+      <!-- État Virement 1 : PIN Pad -->
+      <div class="pay-state" id="stateTransferPin">
+        <h3 style="margin-top:0;font-size:18px;color:#fff;">Validation de sécurité</h3>
+        <p style="color:var(--muted);margin:10px 0 20px 0;font-size:14px;">Saisissez le code de confirmation :</p>
+        <div class="pin-display" id="pinCodeDisplay">0000</div>
+        <div class="pin-dots" id="pinDots"><span></span><span></span><span></span><span></span></div>
+        <div class="keypad">
+            <button class="keypad-btn" onclick="typePin(1)">1</button>
+            <button class="keypad-btn" onclick="typePin(2)">2</button>
+            <button class="keypad-btn" onclick="typePin(3)">3</button>
+            <button class="keypad-btn" onclick="typePin(4)">4</button>
+            <button class="keypad-btn" onclick="typePin(5)">5</button>
+            <button class="keypad-btn" onclick="typePin(6)">6</button>
+            <button class="keypad-btn" onclick="typePin(7)">7</button>
+            <button class="keypad-btn" onclick="typePin(8)">8</button>
+            <button class="keypad-btn" onclick="typePin(9)">9</button>
+            <button class="keypad-btn action" onclick="resetPin()">C</button>
+            <button class="keypad-btn" onclick="typePin(0)">0</button>
+            <button class="keypad-btn action" onclick="closePayment()">✖</button>
         </div>
-        
-        <button class="pay-btn danger" onclick="closePayment()" style="margin-top:15px;">Annuler</button>
+      </div>
+
+      <!-- État Virement 2 : Chiffrement -->
+      <div class="pay-state" id="stateTransferEncrypt">
+        <div class="encrypt-box">
+            <div class="encrypt-ring"></div>
+            <div class="encrypt-ring delay"></div>
+            <div class="encrypt-shield">🛡️</div>
+        </div>
+        <h3 style="margin-top:0;font-size:18px;color:#fff;">Sécurisation du virement</h3>
+        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Chiffrement de bout en bout de la transaction...</p>
+      </div>
+
+      <!-- État Virement 3 : Transfert de fonds -->
+      <div class="pay-state" id="stateTransferSending">
+        <div class="transfer-flow">
+            <div class="flow-icon">📤</div>
+            <div class="flow-line"><div class="flow-packet"></div></div>
+            <div class="flow-icon">📥</div>
+        </div>
+        <h3 style="margin-top:0;font-size:18px;color:#fff;">Transfert en cours</h3>
+        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Envoi des fonds au destinataire...</p>
+      </div>
+
+      <!-- État Virement 4 : Terminé -->
+      <div class="pay-state" id="stateTransferDone">
+        <div class="res-circle success">✔</div>
+        <h3 style="margin-top:0;font-size:22px;color:#fff;">Virement effectué</h3>
+        <div class="recap-box">
+            <div class="recap-row"><span class="recap-label">Destinataire</span><span class="recap-val" id="transferRecapRecipient"></span></div>
+            <div class="recap-row"><span class="recap-label">Montant envoyé</span><span class="recap-val price" id="transferRecapAmount"></span></div>
+            <div class="recap-row"><span class="recap-label">Nouveau solde</span><span class="recap-val" id="transferRecapBalance"></span></div>
+        </div>
+        <button class="pay-btn" onclick="closePayment()">Fermer</button>
       </div>
 
     </div>
@@ -771,6 +761,8 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   <script>
     let userBalance = 0;
     let currentCardStyle = 'dark';
+    let currentCaptcha = '';
+    let typedPin = '';
     let transferData = {};
 
     const styles = {
@@ -993,74 +985,77 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         transferData = { recipientIdentifier: recipient, amount };
 
         document.getElementById('sheetTitle').innerText = "Virement Sécurisé";
-        document.getElementById('successTitle').innerText = "Virement effectué";
-        document.getElementById('failTitle').innerText = "Virement refusé";
-        document.getElementById('recapPriceLabel').innerText = "Montant";
-        document.getElementById('recapBox').style.display = 'block';
-        document.getElementById('redirectText').style.display = 'none'; 
 
-        // Reset Captcha state
-        document.getElementById('captchaCheckbox').classList.remove('checked');
-        document.getElementById('captchaCheckbox').innerHTML = '';
-        document.getElementById('captchaChallengeBox').classList.remove('active');
+        // Setup PIN Pad
+        currentCaptcha = Math.floor(1000 + Math.random() * 9000).toString();
+        document.getElementById('pinCodeDisplay').innerText = currentCaptcha;
+        typedPin = '';
+        updatePinDots();
 
         document.getElementById('payOverlay').style.display = 'flex';
         document.getElementById('payOverlay').classList.add('active');
-        setPayState('stateTransferCaptcha');
+        setPayState('stateTransferPin');
     }
 
-    async function toggleCaptchaChallenge() {
-        const checkbox = document.getElementById('captchaCheckbox');
-        const challengeBox = document.getElementById('captchaChallengeBox');
-        
-        if (!checkbox.classList.contains('checked')) {
-            checkbox.classList.add('checked');
-            checkbox.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-            
-            // Simuler un petit délai de vérification
-            await new Promise(r => setTimeout(r, 500));
-            
-            challengeBox.classList.add('active');
-            await loadCaptcha();
+    function typePin(num) {
+        if (typedPin.length < 4) {
+            typedPin += num;
+            updatePinDots();
+        }
+        if (typedPin.length === 4) {
+            setTimeout(() => {
+                if (typedPin === currentCaptcha) {
+                    executeTransfer();
+                } else {
+                    document.getElementById('failTitle').innerText = "Code incorrect";
+                    document.getElementById('failReason').innerText = "Le code de sécurité saisi est invalide.";
+                    setPayState('stateFail');
+                }
+            }, 300);
         }
     }
 
-    async function loadCaptcha() {
-        const res = await fetch('/api/bank/captcha');
-        const data = await res.json();
-        if (data.success) {
-            document.getElementById('captchaImg').src = data.svg;
-            document.getElementById('captchaInput').value = '';
+    function resetPin() {
+        typedPin = '';
+        updatePinDots();
+    }
+
+    function updatePinDots() {
+        const dots = document.getElementById('pinDots').children;
+        for (let i = 0; i < 4; i++) {
+            if (i < typedPin.length) {
+                dots[i].classList.add('filled');
+            } else {
+                dots[i].classList.remove('filled');
+            }
         }
     }
 
     async function executeTransfer() {
-        const captchaVal = document.getElementById('captchaInput').value;
-        if (!captchaVal) {
-            document.getElementById('failTitle').innerText = "Code manquant";
-            document.getElementById('failReason').innerText = "Veuillez saisir le code de sécurité.";
-            setPayState('stateFail');
-            return;
-        }
-
-        setPayState('stateContactBank');
+        // 1. Animation Chiffrement
+        setPayState('stateTransferEncrypt');
         await new Promise(r => setTimeout(r, 2500));
 
+        // 2. Animation Transfert
+        setPayState('stateTransferSending');
+        await new Promise(r => setTimeout(r, 2500));
+
+        // 3. Appel API
         const res = await fetch('/api/bank/transfer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...transferData, captcha: captchaVal })
+            body: JSON.stringify(transferData)
         });
         const data = await res.json();
 
         if (data.success) {
             userBalance = data.newBalance;
             document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
-            document.getElementById('recapItemName').innerText = transferData.recipientIdentifier;
-            document.getElementById('recapItemPrice').innerText = '- ' + transferData.amount + ' 🪙';
-            document.getElementById('recapBalance').innerText = userBalance.toLocaleString('fr-FR') + ' 🪙';
-            setPayState('stateSuccess');
-            loadData(); // Rafraîchir l'historique
+            document.getElementById('transferRecapRecipient').innerText = transferData.recipientIdentifier;
+            document.getElementById('transferRecapAmount').innerText = '- ' + transferData.amount + ' 🪙';
+            document.getElementById('transferRecapBalance').innerText = userBalance.toLocaleString('fr-FR') + ' 🪙';
+            setPayState('stateTransferDone');
+            loadData(); 
         } else {
             document.getElementById('failReason').innerText = data.message || "Erreur lors du virement.";
             setPayState('stateFail');
