@@ -1,7 +1,6 @@
 const express = require('express');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-// Stockage temporaire des paiements et remboursements en attente (en mémoire)
 const pendingPayments = new Map();
 const pendingRefunds = new Map();
 
@@ -10,7 +9,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     router.use(express.json());
     router.use(express.urlencoded({ extended: true }));
 
-    // Middleware pour protéger le dashboard
     function requireLogin(req, res, next) {
         if (req.session && req.session.bankUserId) {
             next();
@@ -214,6 +212,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 stage, 
                 username,
                 frozen: userEco.bankFrozen,
+                cardStyle: userEco.cardStyle || 'dark',
                 transactions: userEco.transactions.slice().reverse()
             });
         } catch (error) {
@@ -223,7 +222,23 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 5 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
+    // ROUTE 5 : API POUR CHANGER LE STYLE DE CARTE (Protégée)
+    // ----------------------------------------------------
+    router.post('/api/bank/update-card', requireLogin, async (req, res) => {
+        try {
+            const { style } = req.body;
+            const validStyles = ['dark', 'mint', 'ocean', 'sunset', 'gold'];
+            if (!validStyles.includes(style)) return res.json({ success: false, message: "Style invalide." });
+
+            await Economy.updateOne({ userId: String(req.session.bankUserId) }, { cardStyle: style });
+            res.json({ success: true, message: "Carte mise à jour !" });
+        } catch (error) {
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 6 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/items', requireLogin, async (req, res) => {
         try {
@@ -235,7 +250,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 6 : API POUR DÉMARRER UN ACHAT (Protégée)
+    // ROUTE 7 : API POUR DÉMARRER UN ACHAT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/purchase', requireLogin, async (req, res) => {
         try {
@@ -272,7 +287,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 7 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
+    // ROUTE 8 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/check-purchase', requireLogin, async (req, res) => {
         const txId = req.query.transactionId;
@@ -295,7 +310,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 8 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
+    // ROUTE 9 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/request-refund', requireLogin, async (req, res) => {
         try {
@@ -313,7 +328,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             const refundId = Math.random().toString(36).substring(2, 10);
             pendingRefunds.set(refundId, { status: 'pending', userId, txId, amount: Math.abs(tx.amount), label: tx.label });
 
-            // Envoi dans le salon Discord spécifique
             const channelId = process.env.REFUND_CHANNEL_ID || process.env.LOG_CHANNEL_ID;
             if (!channelId) return res.json({ success: false, message: "Salon de remboursement non configuré." });
 
@@ -335,7 +349,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 9 : DASHBOARD (Protégé par requireLogin)
+    // ROUTE 10 : DASHBOARD (Protégé par requireLogin)
     // ----------------------------------------------------
     router.get('/bank', requireLogin, (req, res) => {
         const html = `
@@ -377,7 +391,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .grid-2{display:grid;grid-template-columns:1.2fr 0.8fr;gap:24px;margin-bottom:24px;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;}
   
-  .virtual-card{width:100%;max-width:320px;height:180px;border-radius:16px;background:linear-gradient(135deg,#1C1F26,#0d0f12);position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);padding:20px;display:flex;flex-direction:column;justify-content:space-between;margin-top:20px;border:1px solid rgba(255,255,255,0.05);}
+  .virtual-card{width:100%;max-width:320px;height:180px;border-radius:16px;background:linear-gradient(135deg, #1C1F26, #0d0f12);position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);padding:20px;display:flex;flex-direction:column;justify-content:space-between;margin:0 auto;border:1px solid rgba(255,255,255,0.05);transition:background 0.5s ease;}
   
   .frozen-overlay{display:none;position:fixed;inset:0;background:rgba(8,9,12,0.95);z-index:1000;justify-content:center;align-items:center;flex-direction:column;text-align:center;}
   .frozen-icon{font-size:80px;margin-bottom:20px;}
@@ -393,7 +407,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .pay-state.active{display:block;animation:fadeIn 0.3s ease;}
   @keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 
-  .terminal-card{width:280px;height:170px;background:linear-gradient(135deg,#2C2C2E,#1C1C1E);border:1px solid rgba(255,255,255,0.1);border-radius:16px;margin:0 auto 30px;position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);transform:scale(0.9);transition:transform 0.5s ease;}
+  .terminal-card{width:280px;height:170px;background:linear-gradient(135deg, #1C1F26, #0d0f12);border:1px solid rgba(255,255,255,0.1);border-radius:16px;margin:0 auto 30px;position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);transform:scale(0.9);transition:transform 0.5s ease, background 0.5s ease;}
   .terminal-card.tapping{transform:scale(1) translateY(-5px);}
   .contactless-icon{position:absolute;top:20px;right:20px;color:rgba(255,255,255,0.8);}
   .contactless-pulse{position:absolute;top:18px;right:18px;width:30px;height:30px;border:2px solid var(--accent);border-radius:50%;opacity:0;}
@@ -442,7 +456,16 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .recap-val{color:#fff;font-weight:600;}
   .recap-val.price{color:var(--accent);font-family:'IBM Plex Mono',monospace;}
   .refund-btn{background:rgba(255,215,0,0.1);color:#FFD700;border:1px solid rgba(255,215,0,0.3);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-left:10px;}
-  .refund-btn:disabled{opacity:0.5;cursor:not-allowed;}
+  
+  .style-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:15px;}
+  .style-pick{height:80px;border-radius:12px;cursor:pointer;border:2px solid transparent;transition:all .2s;}
+  .style-pick:hover{border-color:var(--accent);transform:translateY(-3px);}
+  .style-pick.selected{border-color:var(--accent);box-shadow:0 0 15px var(--accent-dim);}
+  .style-dark{background:linear-gradient(135deg, #1C1F26, #0d0f12);}
+  .style-mint{background:linear-gradient(135deg, #005a4a, #00E0B0);}
+  .style-ocean{background:linear-gradient(135deg, #2980b9, #6dd5fa);}
+  .style-sunset{background:linear-gradient(135deg, #dd2476, #ff512f);}
+  .style-gold{background:linear-gradient(135deg, #bf953f, #fcf6ba, #aa771c);}
 </style>
 </head>
 <body>
@@ -503,7 +526,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
       </div>
 
-      <!-- ÉTATS REMBOURSEMENT -->
       <div class="pay-state" id="stateRefundScan">
         <div class="scan-area"><div class="receipt"><div class="receipt-line"></div><div class="receipt-line"></div><div class="receipt-line"></div><div class="receipt-total"></div><div class="receipt-line"></div><div class="receipt-line"></div></div><div class="scan-laser"></div></div>
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Analyse du ticket</h3>
@@ -529,7 +551,11 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   <div class="dash-wrap">
     <aside class="sidebar">
       <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16.5 7.4 20.7 12 22C16.6 20.7 20 16.5 20 11V5L12 2Z" fill="#00E0B0" fill-opacity="0.15" stroke="#00E0B0" stroke-width="1.5"/><circle cx="12" cy="11" r="3" stroke="#00E0B0" stroke-width="1.5"/></svg> Vigi-Banque</div>
-      <nav class="side-nav"><a class="active" onclick="switchTab('home')">Accueil</a><a onclick="switchTab('shop')">Boutique</a></nav>
+      <nav class="side-nav">
+        <a class="active" onclick="switchTab('home')">Accueil</a>
+        <a onclick="switchTab('shop')">Boutique</a>
+        <a onclick="switchTab('card')">Carte</a>
+      </nav>
       <div class="side-user"><div class="avatar" id="sideAvatar">U</div><div><b id="sideName">Employé</b><span id="sidePlan" style="font-size:11px;color:var(--muted);">Compte</span></div></div>
       <button onclick="logout()" style="margin-top:16px;text-align:left;padding:10px 14px;border-radius:10px;color:var(--muted);font-size:13px;">Déconnexion</button>
     </aside>
@@ -542,8 +568,8 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Solde Disponible</div>
             <div style="font-size:42px;font-weight:700;color:#fff;margin-top:8px;font-family:'Space Grotesk';" id="dashBalance">0 Vigi-Coins</div>
             <div style="display:inline-flex;gap:6px;background:var(--accent-dim);color:var(--accent);padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;margin-top:12px;">● Compte synchronisé</div>
-            <div class="virtual-card">
-              <div style="display:flex;justify-content:space-between;"><div style="font-weight:700;font-size:14px;letter-spacing:1px;">VIGI · EMPLOYÉ</div><div style="width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;"></div></div>
+            <div class="virtual-card" id="mainCard">
+              <div style="display:flex;justify-content:space-between;"><div style="font-weight:700;font-size:14px;letter-spacing:1px;color:#fff;">VIGI · EMPLOYÉ</div><div style="width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;"></div></div>
               <div class="mono" style="font-size:16px;letter-spacing:3px;color:#fff;">•••• •••• •••• 7734</div>
               <div style="display:flex;justify-content:space-between;font-size:12px;color:#ccc;"><div id="vcName">NOM</div><div style="color:#aaa;">12/26</div></div>
             </div>
@@ -568,15 +594,59 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             <div id="shopGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;"></div>
          </div>
       </div>
+
+      <div id="tab-card" class="tab-content" style="display:none;">
+         <div class="topbar"><div><h1>Personnalisation</h1><div style="font-size:13px;color:var(--muted);margin-top:4px;">Choisissez le design de votre carte</div></div></div>
+         <div class="card">
+            <div id="cardAlert" class="discord-notify" style="display:none;"></div>
+            <div class="virtual-card" id="previewCard" style="margin-bottom: 40px;">
+                <div style="display:flex;justify-content:space-between;"><div style="font-weight:700;font-size:14px;letter-spacing:1px;color:#fff;">VIGI · EMPLOYÉ</div><div style="width:40px;height:30px;background:linear-gradient(135deg,#bf953f,#fcf6ba,#aa771c);border-radius:6px;"></div></div>
+                <div class="mono" style="font-size:16px;letter-spacing:3px;color:#fff;">•••• •••• •••• 7734</div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#ccc;"><div id="prevName">NOM</div><div style="color:#aaa;">12/26</div></div>
+            </div>
+            
+            <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Sélectionnez un thème</h3>
+            <div class="style-grid">
+                <div class="style-pick style-dark" onclick="updateCardStyle('dark')"></div>
+                <div class="style-pick style-mint" onclick="updateCardStyle('mint')"></div>
+                <div class="style-pick style-ocean" onclick="updateCardStyle('ocean')"></div>
+                <div class="style-pick style-sunset" onclick="updateCardStyle('sunset')"></div>
+                <div class="style-pick style-gold" onclick="updateCardStyle('gold')"></div>
+            </div>
+         </div>
+      </div>
     </main>
   </div>
 
   <script>
     let userBalance = 0;
+    let currentCardStyle = 'dark';
+    const styles = {
+        dark: 'linear-gradient(135deg, #1C1F26, #0d0f12)',
+        mint: 'linear-gradient(135deg, #005a4a, #00E0B0)',
+        ocean: 'linear-gradient(135deg, #2980b9, #6dd5fa)',
+        sunset: 'linear-gradient(135deg, #dd2476, #ff512f)',
+        gold: 'linear-gradient(135deg, #bf953f, #fcf6ba, #aa771c)'
+    };
+
+    function applyCardStyle(style) {
+        const bg = styles[style] || styles.dark;
+        document.getElementById('mainCard').style.background = bg;
+        document.getElementById('previewCard').style.background = bg;
+        document.getElementById('animCard').style.background = bg;
+        
+        document.querySelectorAll('.style-pick').forEach(p => p.classList.remove('selected'));
+        const activePick = document.querySelector('.style-' + style);
+        if (activePick) activePick.classList.add('selected');
+    }
 
     function switchTab(t) {
       document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
       document.getElementById('tab-' + t).style.display = 'block';
+      document.querySelectorAll('.side-nav a').forEach(a => a.classList.remove('active'));
+      if(t === 'home') document.querySelectorAll('.side-nav a')[0].classList.add('active');
+      if(t === 'shop') document.querySelectorAll('.side-nav a')[1].classList.add('active');
+      if(t === 'card') document.querySelectorAll('.side-nav a')[2].classList.add('active');
     }
 
     function setPayState(stateId) {
@@ -591,12 +661,16 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         if (data.frozen) { document.getElementById('frozenScreen').style.display = 'flex'; return; }
 
         userBalance = data.balance;
+        currentCardStyle = data.cardStyle || 'dark';
+        applyCardStyle(currentCardStyle);
+
         document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
         const name = data.username || 'Employé';
         document.getElementById('greeting').innerText = 'Bonjour, ' + name + ' 👋';
         document.getElementById('sideName').innerText = name;
         document.getElementById('sideAvatar').innerText = name.charAt(0).toUpperCase();
         document.getElementById('vcName').innerText = name.toUpperCase();
+        document.getElementById('prevName').innerText = name.toUpperCase();
         document.getElementById('payCardName').innerText = name.toUpperCase();
         
         const planName = data.stage === 'confirmed' ? 'Titulaire' : (data.stage === 'trainee' ? 'En formation' : 'Non employé');
@@ -616,7 +690,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 h += '<div style="flex:1;"><b style="font-size:14px;display:block;color:#fff;">' + tx.label + '</b><span style="font-size:12px;color:var(--muted);">' + new Date(tx.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' }) + '</span></div>';
                 h += '<div class="mono" style="font-weight:600;color:' + (isPos ? 'var(--accent)' : 'var(--danger)') + ';">' + (isPos ? '+' : '') + tx.amount + ' 🪙</div>';
                 
-                // CORRECTION ICI : On vérifie que ça COMMENCE par 'Achat Boutique' et que ce n'est PAS 'Remboursé'
                 if (tx.label.startsWith('Achat Boutique') && !tx.label.includes('Remboursé')) {
                     h += '<button class="refund-btn" onclick="requestRefund(\\'' + tx._id + '\\')">↩️ Rembourser</button>';
                 }
@@ -626,6 +699,25 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         }
         loadShopItems();
       } else { window.location.href = '/bank/login'; }
+    }
+
+    async function updateCardStyle(style) {
+        applyCardStyle(style);
+        const res = await fetch('/api/bank/update-card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ style }) });
+        const data = await res.json();
+        
+        const alertDiv = document.getElementById('cardAlert');
+        if(data.success) {
+            currentCardStyle = style;
+            alertDiv.innerText = "✅ Design mis à jour avec succès !";
+            alertDiv.style.color = "var(--accent)";
+        } else {
+            applyCardStyle(currentCardStyle);
+            alertDiv.innerText = "❌ Erreur lors de la mise à jour.";
+            alertDiv.style.color = "var(--danger)";
+        }
+        alertDiv.style.display = 'flex';
+        setTimeout(() => { alertDiv.style.display = 'none'; }, 3000);
     }
 
     async function loadShopItems() {
@@ -754,7 +846,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
 
-        // ACHATS
         if (interaction.customId.startsWith('pay_accept_') || interaction.customId.startsWith('pay_decline_')) {
             const txId = interaction.customId.split('_')[2];
             const tx = pendingPayments.get(txId);
@@ -780,7 +871,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             }
         }
 
-        // REMBOURSEMENTS
         if (interaction.customId.startsWith('refund_accept_') || interaction.customId.startsWith('refund_decline_')) {
             const refundId = interaction.customId.split('_')[2];
             const ref = pendingRefunds.get(refundId);
