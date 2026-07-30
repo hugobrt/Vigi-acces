@@ -238,7 +238,39 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 6 : API POUR VIREMENT (Protégée)
+    // ROUTE 6 : API POUR RÉCUPÉRER LES DESTINATAIRES (Virement)
+    // ----------------------------------------------------
+    router.get('/api/bank/recipients', requireLogin, async (req, res) => {
+        try {
+            const currentUserId = req.session.bankUserId;
+            // On cherche tous les comptes qui ont un identifiant bancaire, sauf l'utilisateur actuel
+            const accounts = await Economy.find({ bankIdentifier: { $ne: null, $exists: true } });
+            
+            const guildId = process.env.GUILD_ID;
+            const guild = client.guilds.cache.get(guildId);
+            const recipients = [];
+            
+            for (const acc of accounts) {
+                if (acc.userId === currentUserId) continue; // Ne pas s'afficher soi-même
+                
+                let name = acc.bankIdentifier; // Fallback
+                if (guild) {
+                    try {
+                        const member = await guild.members.fetch(acc.userId);
+                        name = member.user.username;
+                    } catch(e) {}
+                }
+                recipients.push({ id: acc.bankIdentifier, name: name });
+            }
+            
+            res.json({ success: true, recipients });
+        } catch (error) {
+            res.json({ success: false, message: error.message });
+        }
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 7 : API POUR VIREMENT (Protégée)
     // ----------------------------------------------------
     router.post('/api/bank/transfer', requireLogin, async (req, res) => {
         try {
@@ -248,7 +280,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             const senderEco = await Economy.findOne({ userId: String(senderId) });
             if (!senderEco) return res.json({ success: false, message: "Compte expéditeur introuvable." });
 
-            const cleanIdent = recipientIdentifier ? recipientIdentifier.trim().toLowerCase() : null;
+            const cleanIdent = recipientIdentifier ? recipientIdentifier.trim() : null;
             if (senderEco.bankIdentifier === cleanIdent) return res.json({ success: false, message: "Vous ne pouvez pas vous envoyer d'argent à vous-même." });
 
             const recipientEco = await Economy.findOne({ bankIdentifier: cleanIdent });
@@ -273,7 +305,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 7 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
+    // ROUTE 8 : API POUR RÉCUPÉRER LES ARTICLES (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/items', requireLogin, async (req, res) => {
         try {
@@ -285,7 +317,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 8 : API POUR DÉMARRER UN ACHAT (Protégée)
+    // ROUTE 9 : API POUR DÉMARRER UN ACHAT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/purchase', requireLogin, async (req, res) => {
         try {
@@ -322,7 +354,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 9 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
+    // ROUTE 10 : API POUR VÉRIFIER LE STATUT DE L'ACHAT (Protégée)
     // ----------------------------------------------------
     router.get('/api/shop/check-purchase', requireLogin, async (req, res) => {
         const txId = req.query.transactionId;
@@ -345,7 +377,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 10 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
+    // ROUTE 11 : API POUR DEMANDER UN REMBOURSEMENT (Protégée)
     // ----------------------------------------------------
     router.post('/api/shop/request-refund', requireLogin, async (req, res) => {
         try {
@@ -384,7 +416,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // ROUTE 11 : DASHBOARD (Protégé par requireLogin)
+    // ROUTE 12 : DASHBOARD (Protégé par requireLogin)
     // ----------------------------------------------------
     router.get('/bank', requireLogin, (req, res) => {
         const html = `
@@ -506,6 +538,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 
   .form-control{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;color:#fff;font-size:16px;outline:none;transition:border .2s;margin-bottom:16px;}
   .form-control:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-dim);}
+  select.form-control option { background:var(--surface); color:#fff; }
   
   /* KEYPAD PIN (Virement) */
   .pin-display{font-family:'IBM Plex Mono',monospace;font-size:36px;color:var(--accent);letter-spacing:12px;text-align:center;margin-bottom:20px;background:rgba(0,224,176,0.1);padding:10px;border-radius:8px;}
@@ -724,8 +757,10 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
          <div class="topbar"><div><h1>Virement</h1><div style="font-size:13px;color:var(--muted);margin-top:4px;">Envoyez des Vigi-Coins à un autre employé</div></div></div>
          <div class="card" style="max-width:500px;margin:0 auto;">
             <div style="margin-bottom:16px;">
-                <label style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px;">Identifiant du destinataire</label>
-                <input type="text" id="transferRecipient" class="form-control" placeholder="ex: jean.dupont">
+                <label style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px;">Destinataire</label>
+                <select id="transferRecipientSelect" class="form-control">
+                    <option value="">Chargement des employés...</option>
+                </select>
             </div>
             <div style="margin-bottom:24px;">
                 <label style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px;">Montant (Vigi-Coins)</label>
@@ -844,7 +879,24 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             txList.innerHTML = h;
         }
         loadShopItems();
+        loadRecipients(); // Charger la liste des destinataires
       } else { window.location.href = '/bank/login'; }
+    }
+
+    async function loadRecipients() {
+        const res = await fetch('/api/bank/recipients');
+        const data = await res.json();
+        const select = document.getElementById('transferRecipientSelect');
+        if (data.success) {
+            if (data.recipients.length === 0) {
+                select.innerHTML = '<option value="">Aucun autre employé éligible</option>';
+            } else {
+                select.innerHTML = '<option value="">Sélectionnez un destinataire...</option>';
+                data.recipients.forEach(r => {
+                    select.innerHTML += `<option value="${r.id}">${r.name}</option>`;
+                });
+            }
+        }
     }
 
     async function updateCardStyle(style) {
@@ -974,11 +1026,12 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 
     // --- VIREMENT ---
     function startTransfer() {
-        const recipient = document.getElementById('transferRecipient').value.trim();
+        const recipientSelect = document.getElementById('transferRecipientSelect');
+        const recipient = recipientSelect.value;
         const amount = document.getElementById('transferAmount').value;
 
         if (!recipient || !amount || amount <= 0) {
-            alert("Veuillez remplir l'identifiant et un montant valide.");
+            alert("Veuillez sélectionner un destinataire et entrer un montant valide.");
             return;
         }
 
@@ -1051,7 +1104,12 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         if (data.success) {
             userBalance = data.newBalance;
             document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
-            document.getElementById('transferRecapRecipient').innerText = transferData.recipientIdentifier;
+            
+            // Récupérer le nom du destinataire sélectionné pour l'affichage
+            const select = document.getElementById('transferRecipientSelect');
+            const recipientName = select.options[select.selectedIndex].text;
+            
+            document.getElementById('transferRecapRecipient').innerText = recipientName;
             document.getElementById('transferRecapAmount').innerText = '- ' + transferData.amount + ' 🪙';
             document.getElementById('transferRecapBalance').innerText = userBalance.toLocaleString('fr-FR') + ' 🪙';
             setPayState('stateTransferDone');
