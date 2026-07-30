@@ -250,11 +250,9 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             
             if (userEco.balance < item.price) return res.json({ success: false, message: "Fonds insuffisants." });
 
-            // Créer une transaction en attente
             const txId = Math.random().toString(36).substring(2, 10);
             pendingPayments.set(txId, { status: 'pending', userId, itemId });
 
-            // Envoyer le DM de validation
             try {
                 const user = await client.users.fetch(userId);
                 const row = new ActionRowBuilder()
@@ -281,7 +279,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         const tx = pendingPayments.get(txId);
         
         if (!tx) return res.json({ success: false, status: 'expired' });
-        
         if (tx.status === 'pending') return res.json({ success: true, status: 'pending' });
         
         const result = { status: tx.status };
@@ -293,7 +290,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             result.message = tx.message;
         }
         
-        pendingPayments.delete(txId); // On nettoie
+        pendingPayments.delete(txId); 
         res.json({ success: true, ...result });
     });
 
@@ -302,71 +299,43 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     // ----------------------------------------------------
     router.post('/api/shop/request-refund', requireLogin, async (req, res) => {
         try {
-            const { txId } = req.body; // L'ID de la transaction d'achat dans MongoDB
+            const { txId } = req.body; 
             const userId = req.session.bankUserId;
             
             const userEco = await Economy.findOne({ userId: String(userId) });
             if (!userEco) return res.json({ success: false, message: "Compte introuvable." });
 
-            // Trouver la transaction dans l'historique
             const tx = userEco.transactions.id(txId);
             if (!tx) return res.json({ success: false, message: "Transaction introuvable." });
-            if (!tx.label.includes('Achat Boutique')) return res.json({ success: false, message: "Seuls les achats boutique peuvent être remboursés." });
+            if (!tx.label.startsWith('Achat Boutique')) return res.json({ success: false, message: "Seuls les achats boutique peuvent être remboursés." });
+            if (tx.label.includes('Remboursé')) return res.json({ success: false, message: "Cet achat a déjà été remboursé." });
 
-            // Vérifier si un remboursement n'est pas déjà en cours
             const refundId = Math.random().toString(36).substring(2, 10);
-            pendingRefunds.set(refundId, { status: 'pending', userId, txId });
+            pendingRefunds.set(refundId, { status: 'pending', userId, txId, amount: Math.abs(tx.amount), label: tx.label });
 
-            // Envoyer le DM à l'administration (Propriétaire du serveur)
-            try {
-                const guildId = process.env.GUILD_ID;
-                const guild = client.guilds.cache.get(guildId);
-                if (!guild) return res.json({ success: false, message: "Serveur introuvable." });
+            // Envoi dans le salon Discord spécifique
+            const channelId = process.env.REFUND_CHANNEL_ID || process.env.LOG_CHANNEL_ID;
+            if (!channelId) return res.json({ success: false, message: "Salon de remboursement non configuré." });
 
-                const owner = await guild.fetchOwner();
-                const row = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder().setCustomId('refund_accept_' + refundId).setLabel('✅ Approuver le remboursement').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId('refund_decline_' + refundId).setLabel('❌ Refuser').setStyle(ButtonStyle.Danger)
-                    );
-                
-                await owner.send({ content: `↩️ **Vigi-Banque - Demande de Remboursement**\n\nL'employé <@${userId}> demande un remboursement pour : **${tx.label}** (Montant: ${Math.abs(tx.amount)} 🪙).\nVeuillez traiter cette demande.`, components: [row] });
-            } catch (e) {
-                return res.json({ success: false, message: "DM impossible à envoyer à l'administration." });
-            }
+            const channel = client.channels.cache.get(channelId);
+            if (!channel) return res.json({ success: false, message: "Salon introuvable." });
 
-            res.json({ success: true, refundId: refundId });
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder().setCustomId('refund_accept_' + refundId).setLabel('✅ Approuver le remboursement').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId('refund_decline_' + refundId).setLabel('❌ Refuser').setStyle(ButtonStyle.Danger)
+                );
+            
+            await channel.send({ content: `↩️ **Vigi-Banque - Demande de Remboursement**\n\n**Employé :** <@${userId}>\n**Article :** ${tx.label}\n**Montant à rembourser :** ${Math.abs(tx.amount)} 🪙\n\nVeuillez traiter cette demande :`, components: [row] });
+
+            res.json({ success: true, message: "Demande envoyée" });
         } catch (error) {
             res.json({ success: false, message: error.message });
         }
     });
 
     // ----------------------------------------------------
-    // ROUTE 9 : API POUR VÉRIFIER LE STATUT DU REMBOURSEMENT (Protégée)
-    // ----------------------------------------------------
-    router.get('/api/shop/check-refund', requireLogin, async (req, res) => {
-        const refundId = req.query.refundId;
-        const ref = pendingRefunds.get(refundId);
-        
-        if (!ref) return res.json({ success: false, status: 'expired' });
-        
-        if (ref.status === 'pending') return res.json({ success: true, status: 'pending' });
-        
-        const result = { status: ref.status };
-        if (ref.status === 'approved') {
-            result.newBalance = ref.newBalance;
-            result.itemName = ref.itemName;
-            result.itemPrice = ref.itemPrice;
-        } else {
-            result.message = ref.message;
-        }
-        
-        pendingRefunds.delete(refId); // On nettoie
-        res.json({ success: true, ...result });
-    });
-
-    // ----------------------------------------------------
-    // ROUTE 10 : DASHBOARD (Protégé par requireLogin)
+    // ROUTE 9 : DASHBOARD (Protégé par requireLogin)
     // ----------------------------------------------------
     router.get('/bank', requireLogin, (req, res) => {
         const html = `
@@ -410,47 +379,26 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   
   .virtual-card{width:100%;max-width:320px;height:180px;border-radius:16px;background:linear-gradient(135deg,#1C1F26,#0d0f12);position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);padding:20px;display:flex;flex-direction:column;justify-content:space-between;margin-top:20px;border:1px solid rgba(255,255,255,0.05);}
   
-  /* FROZEN SCREEN */
   .frozen-overlay{display:none;position:fixed;inset:0;background:rgba(8,9,12,0.95);z-index:1000;justify-content:center;align-items:center;flex-direction:column;text-align:center;}
   .frozen-icon{font-size:80px;margin-bottom:20px;}
   .frozen-overlay h1{color:var(--danger);font-size:32px;margin-bottom:10px;}
   .frozen-overlay p{color:var(--muted);max-width:400px;line-height:1.6;}
 
-  /* ===========================================
-     ANIMATION PAIEMENT (APPLE PAY / TERMINAL)
-     =========================================== */
   .pay-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(12px);z-index:2000;justify-content:center;align-items:flex-end;text-align:center;}
-  
-  .pay-sheet{
-    background:#1C1C1E;width:100%;max-width:420px;
-    border-radius:24px 24px 0 0;padding:24px 20px 40px;
-    box-shadow:0 -10px 40px rgba(0,0,0,0.5);
-    transform:translateY(100%);
-    transition:transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
-  }
+  .pay-sheet{background:#1C1C1E;width:100%;max-width:420px;border-radius:24px 24px 0 0;padding:24px 20px 40px;box-shadow:0 -10px 40px rgba(0,0,0,0.5);transform:translateY(100%);transition:transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);}
   .pay-overlay.active .pay-sheet{transform:translateY(0);}
-  
   .sheet-handle{width:40px;height:5px;background:#666;border-radius:3px;margin:0 auto 24px;}
   .sheet-title{color:#fff;font-size:16px;text-transform:uppercase;letter-spacing:1px;margin-bottom:20px;}
-  
   .pay-state{display:none;}
   .pay-state.active{display:block;animation:fadeIn 0.3s ease;}
   @keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 
-  /* Terminal Card */
-  .terminal-card{
-    width:280px;height:170px;background:linear-gradient(135deg,#2C2C2E,#1C1C1E);
-    border:1px solid rgba(255,255,255,0.1);border-radius:16px;margin:0 auto 30px;
-    position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);
-    transform:scale(0.9);transition:transform 0.5s ease;
-  }
+  .terminal-card{width:280px;height:170px;background:linear-gradient(135deg,#2C2C2E,#1C1C1E);border:1px solid rgba(255,255,255,0.1);border-radius:16px;margin:0 auto 30px;position:relative;box-shadow:0 20px 40px rgba(0,0,0,0.5);transform:scale(0.9);transition:transform 0.5s ease;}
   .terminal-card.tapping{transform:scale(1) translateY(-5px);}
-  
   .contactless-icon{position:absolute;top:20px;right:20px;color:rgba(255,255,255,0.8);}
   .contactless-pulse{position:absolute;top:18px;right:18px;width:30px;height:30px;border:2px solid var(--accent);border-radius:50%;opacity:0;}
   .terminal-card.tapping .contactless-pulse{animation:pulseRing 1.5s infinite;}
   @keyframes pulseRing{0% {transform:scale(0.8);opacity:0.8;}100%{transform:scale(2.5);opacity:0;}}
-
   .term-dots{display:flex;gap:8px;justify-content:center;margin-top:10px;}
   .term-dots span{width:8px;height:8px;border-radius:50%;background:#444;}
   .term-dots.active span{animation:dotBlink 1.2s infinite both;}
@@ -458,73 +406,46 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
   .term-dots span:nth-child(3){animation-delay:0.4s;}
   @keyframes dotBlink{0%, 100% {background:#444;}50% {background:var(--accent);box-shadow:0 0 10px var(--accent);}}
 
-  /* Cercle de chargement (Loader) */
-  .loader-ring{
-    width:80px;height:80px;border-radius:50%;
-    border:5px solid rgba(255,255,255,0.1);
-    border-top:5px solid var(--accent);
-    animation:spin 1s linear infinite;margin:0 auto 20px;
-  }
+  .loader-ring{width:80px;height:80px;border-radius:50%;border:5px solid rgba(255,255,255,0.1);border-top:5px solid var(--accent);animation:spin 1s linear infinite;margin:0 auto 20px;}
   @keyframes spin{100%{transform:rotate(360deg);}}
 
-  /* Animation Transfert Données (Banque) */
   .wifi-signal{position:relative;width:100px;height:100px;margin:0 auto 24px;display:flex;justify-content:center;align-items:flex-end;}
   .wifi-dot{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),#005a4a);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;z-index:2;box-shadow:0 0 15px var(--accent);}
   .wifi-arc{position:absolute;bottom:18px;border:4px solid transparent;border-top-color:rgba(255,255,255,0.8);border-radius:50%;opacity:0;transform-origin:bottom center;}
   .wifi-arc.arc1{width:50px;height:50px;animation:wifiPulse 1.5s infinite ease-out;}
   .wifi-arc.arc2{width:75px;height:75px;animation:wifiPulse 1.5s infinite ease-out 0.4s;}
   .wifi-arc.arc3{width:100px;height:100px;animation:wifiPulse 1.5s infinite ease-out 0.8s;}
-  @keyframes wifiPulse{
-    0%{opacity:0;transform:scale(0.7);}
-    50%{opacity:0.9;}
-    100%{opacity:0;transform:scale(1.3);}
-  }
+  @keyframes wifiPulse{0%{opacity:0;transform:scale(0.7);}50%{opacity:0.9;}100%{opacity:0;transform:scale(1.3);}}
 
-  /* ===========================================
-     ANIMATION REMBOURSEMENT (SCAN TICKET)
-     =========================================== */
   .scan-area{position:relative;width:150px;height:200px;margin:0 auto 30px;overflow:hidden;border-radius:8px;border:2px solid var(--border);}
   .receipt{width:100%;height:100%;background:#fff;display:flex;flex-direction:column;align-items:center;padding-top:20px;color:#000;}
   .receipt-line{width:70%;height:4px;background:#ddd;margin-bottom:8px;border-radius:2px;}
   .receipt-total{width:50%;height:6px;background:#000;margin-top:10px;border-radius:2px;}
   .scan-laser{position:absolute;left:0;right:0;height:3px;background:var(--accent);box-shadow:0 0 15px var(--accent);animation:scanMove 2s infinite linear;}
-  @keyframes scanMove{
-    0%{top:0;}
-    50%{top:calc(100% - 3px);}
-    100%{top:0;}
-  }
+  @keyframes scanMove{0%{top:0;}50%{top:calc(100% - 3px);}100%{top:0;}}
 
-  /* Paper Plane Animation */
   .plane-signal{position:relative;width:100px;height:100px;margin:0 auto 24px;display:flex;justify-content:center;align-items:center;}
   .plane-icon{font-size:40px;animation:fly 1.5s infinite ease-in-out;z-index:2;}
-  @keyframes fly{
-    0%{transform:translateY(0) rotate(10deg);opacity:1;}
-    50%{transform:translateY(-20px) rotate(15deg);opacity:0.8;}
-    100%{transform:translateY(0) rotate(10deg);opacity:1;}
-  }
+  @keyframes fly{0%{transform:translateY(0) rotate(10deg);opacity:1;}50%{transform:translateY(-20px) rotate(15deg);opacity:0.8;}100%{transform:translateY(0) rotate(10deg);opacity:1;}}
 
-  /* Succès / Échec */
   .res-circle{width:80px;height:80px;border-radius:50%;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;font-size:40px;color:#000;font-weight:bold;animation:popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);}
   .res-circle.success{background:var(--accent);}
   .res-circle.fail{background:var(--danger);color:#fff;}
   @keyframes popIn{from{transform:scale(0);}to{transform:scale(1);}}
 
   .pay-btn{margin-top:25px;background:var(--surface2);color:#fff;padding:12px 24px;border-radius:12px;font-weight:600;border:1px solid var(--border);width:100%;}
-  
   .discord-notify{display:inline-flex;align-items:center;gap:8px;color:#5865F2;font-weight:600;margin-top:10px;}
-
   .recap-box{background:#181C24;border:1px solid #222732;border-radius:12px;padding:16px;margin:20px 0;text-align:left;}
   .recap-row{display:flex;justify-content:space-between;margin-bottom:12px;font-size:14px;}
   .recap-row:last-child{margin-bottom:0;border-top:1px solid #222732;padding-top:12px;}
   .recap-label{color:var(--muted);}
   .recap-val{color:#fff;font-weight:600;}
   .recap-val.price{color:var(--accent);font-family:'IBM Plex Mono',monospace;}
-
   .refund-btn{background:rgba(255,215,0,0.1);color:#FFD700;border:1px solid rgba(255,215,0,0.3);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-left:10px;}
+  .refund-btn:disabled{opacity:0.5;cursor:not-allowed;}
 </style>
 </head>
 <body>
-  <!-- ÉCRAN DE GEL -->
   <div class="frozen-overlay" id="frozenScreen">
     <div class="frozen-icon">🔒</div>
     <h1>Compte Gelé</h1>
@@ -532,19 +453,15 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     <button onclick="logout()" style="margin-top:30px;background:var(--surface2);padding:12px 24px;border-radius:10px;font-weight:600;color:#fff;">Se déconnecter</button>
   </div>
 
-  <!-- ÉCRAN DE PAIEMENT / REMBOURSEMENT -->
   <div class="pay-overlay" id="payOverlay">
     <div class="pay-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="sheetTitle">Vigi Pay</div>
       
-      <!-- État 1 : Carte + Contactless -->
       <div class="pay-state active" id="stateCard">
         <div class="terminal-card" id="animCard">
           <div class="contactless-pulse"></div>
-          <div class="contactless-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 9a3 3 0 010 6M12 6a7 7 0 010 12M15 3a11 11 0 010 18"/></svg>
-          </div>
+          <div class="contactless-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 9a3 3 0 010 6M12 6a7 7 0 010 12M15 3a11 11 0 010 18"/></svg></div>
           <div style="position:absolute;top:20px;left:20px;font-weight:700;font-size:14px;letter-spacing:1px;color:#fff;">VIGI · EMPLOYÉ</div>
           <div class="mono" style="font-size:18px;letter-spacing:3px;color:#fff;position:absolute;bottom:60px;left:20px;">•••• 7734</div>
           <div style="position:absolute;bottom:20px;left:20px;font-size:12px;color:#ccc;" id="payCardName">NOM</div>
@@ -554,43 +471,31 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <div class="term-dots" id="termDots"><span></span><span></span><span></span></div>
       </div>
 
-      <!-- État 2 : ACS / Vérification Discord -->
       <div class="pay-state" id="stateAcs">
         <div class="loader-ring"></div>
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Validation requise</h3>
         <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Veuillez confirmer le paiement dans vos messages privés Discord...</p>
-        <div class="discord-notify">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.010c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.010c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-          En attente de validation Discord
-        </div>
+        <div class="discord-notify"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.010c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.010c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg> En attente de validation Discord</div>
       </div>
 
-      <!-- État 2.5 : Contact Banque (Transfert de données) -->
       <div class="pay-state" id="stateContactBank">
-        <div class="wifi-signal">
-            <div class="wifi-arc arc1"></div>
-            <div class="wifi-arc arc2"></div>
-            <div class="wifi-arc arc3"></div>
-            <div class="wifi-dot">🏦</div>
-        </div>
+        <div class="wifi-signal"><div class="wifi-arc arc1"></div><div class="wifi-arc arc2"></div><div class="wifi-arc arc3"></div><div class="wifi-dot">🏦</div></div>
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Contact établissement bancaire</h3>
         <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Transfert de données sécurisé en cours...</p>
       </div>
 
-      <!-- État 3 : Succès -->
       <div class="pay-state" id="stateSuccess">
         <div class="res-circle success">✔</div>
         <h3 style="margin-top:0;font-size:22px;color:#fff;" id="successTitle">Paiement validé</h3>
-        <div class="recap-box">
+        <div class="recap-box" id="recapBox">
             <div class="recap-row"><span class="recap-label">Article</span><span class="recap-val" id="recapItemName"></span></div>
             <div class="recap-row"><span class="recap-label" id="recapPriceLabel">Prix</span><span class="recap-val price" id="recapItemPrice"></span></div>
             <div class="recap-row"><span class="recap-label">Nouveau solde</span><span class="recap-val" id="recapBalance"></span></div>
         </div>
-        <p style="color:var(--muted); font-size:12px;">Redirection vers le site marchand dans <span id="redirectCountdown">5</span>s...</p>
+        <p style="color:var(--muted); font-size:12px;" id="redirectText">Redirection vers le site marchand dans <span id="redirectCountdown">5</span>s...</p>
         <button class="pay-btn" onclick="closePayment()">Terminer</button>
       </div>
 
-      <!-- État 4 : Échec -->
       <div class="pay-state" id="stateFail">
         <div class="res-circle fail">✖</div>
         <h3 style="margin-top:0;font-size:22px;color:#fff;" id="failTitle">Paiement refusé</h3>
@@ -598,42 +503,24 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         <button class="pay-btn" onclick="closePayment()">Retour à la boutique</button>
       </div>
 
-      <!-- =========================================== -->
-      <!-- ÉTATS REMBOURSEMENT                          -->
-      <!-- =========================================== -->
-
-      <!-- État R1 : Scan du ticket -->
+      <!-- ÉTATS REMBOURSEMENT -->
       <div class="pay-state" id="stateRefundScan">
-        <div class="scan-area">
-          <div class="receipt">
-            <div class="receipt-line"></div><div class="receipt-line"></div><div class="receipt-line"></div>
-            <div class="receipt-total"></div>
-            <div class="receipt-line"></div><div class="receipt-line"></div>
-          </div>
-          <div class="scan-laser"></div>
-        </div>
+        <div class="scan-area"><div class="receipt"><div class="receipt-line"></div><div class="receipt-line"></div><div class="receipt-line"></div><div class="receipt-total"></div><div class="receipt-line"></div><div class="receipt-line"></div></div><div class="scan-laser"></div></div>
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Analyse du ticket</h3>
         <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Lecture de la transaction d'origine...</p>
       </div>
 
-      <!-- État R2 : Transmission à l'administration -->
       <div class="pay-state" id="stateRefundTransmit">
-        <div class="plane-signal">
-          <div class="plane-icon">✈️</div>
-        </div>
+        <div class="plane-signal"><div class="plane-icon">✈️</div></div>
         <h3 style="margin-top:0;font-size:18px;color:#fff;">Transmission de la demande</h3>
         <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Envoi de la requête au service financier...</p>
       </div>
 
-      <!-- État R3 : Attente validation admin -->
-      <div class="pay-state" id="stateRefundWait">
-        <div class="loader-ring"></div>
-        <h3 style="margin-top:0;font-size:18px;color:#fff;">Validation requise</h3>
-        <p style="color:var(--muted);margin:10px 0 0 0;font-size:14px;">Un responsable doit approuver votre remboursement sur Discord...</p>
-        <div class="discord-notify">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.010c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.010c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-          En attente de l'administration
-        </div>
+      <div class="pay-state" id="stateRefundSent">
+        <div class="res-circle success">✔</div>
+        <h3 style="margin-top:0;font-size:22px;color:#fff;">Demande envoyée</h3>
+        <p style="color:var(--muted);margin:10px 0;">Votre demande de remboursement a bien été transmise à l'administration. Vous pouvez fermer cette fenêtre.</p>
+        <button class="pay-btn" onclick="closePayment()">Fermer</button>
       </div>
 
     </div>
@@ -641,18 +528,9 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 
   <div class="dash-wrap">
     <aside class="sidebar">
-      <div class="logo">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16.5 7.4 20.7 12 22C16.6 20.7 20 16.5 20 11V5L12 2Z" fill="#00E0B0" fill-opacity="0.15" stroke="#00E0B0" stroke-width="1.5"/><circle cx="12" cy="11" r="3" stroke="#00E0B0" stroke-width="1.5"/></svg>
-        Vigi-Banque
-      </div>
-      <nav class="side-nav">
-        <a class="active" onclick="switchTab('home')">Accueil</a>
-        <a onclick="switchTab('shop')">Boutique</a>
-      </nav>
-      <div class="side-user">
-        <div class="avatar" id="sideAvatar">U</div>
-        <div><b id="sideName">Employé</b><span id="sidePlan" style="font-size:11px;color:var(--muted);">Compte</span></div>
-      </div>
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5V11C4 16.5 7.4 20.7 12 22C16.6 20.7 20 16.5 20 11V5L12 2Z" fill="#00E0B0" fill-opacity="0.15" stroke="#00E0B0" stroke-width="1.5"/><circle cx="12" cy="11" r="3" stroke="#00E0B0" stroke-width="1.5"/></svg> Vigi-Banque</div>
+      <nav class="side-nav"><a class="active" onclick="switchTab('home')">Accueil</a><a onclick="switchTab('shop')">Boutique</a></nav>
+      <div class="side-user"><div class="avatar" id="sideAvatar">U</div><div><b id="sideName">Employé</b><span id="sidePlan" style="font-size:11px;color:var(--muted);">Compte</span></div></div>
       <button onclick="logout()" style="margin-top:16px;text-align:left;padding:10px 14px;border-radius:10px;color:var(--muted);font-size:13px;">Déconnexion</button>
     </aside>
 
@@ -710,10 +588,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
       const res = await fetch('/api/bank/data');
       const data = await res.json();
       if (data.success) {
-        if (data.frozen) {
-          document.getElementById('frozenScreen').style.display = 'flex';
-          return;
-        }
+        if (data.frozen) { document.getElementById('frozenScreen').style.display = 'flex'; return; }
 
         userBalance = data.balance;
         document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
@@ -741,16 +616,14 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 h += '<div style="flex:1;"><b style="font-size:14px;display:block;color:#fff;">' + tx.label + '</b><span style="font-size:12px;color:var(--muted);">' + new Date(tx.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' }) + '</span></div>';
                 h += '<div class="mono" style="font-weight:600;color:' + (isPos ? 'var(--accent)' : 'var(--danger)') + ';">' + (isPos ? '+' : '') + tx.amount + ' 🪙</div>';
                 
-                // Bouton Rembourser si c'est un achat boutique
-                if (tx.label.includes('Achat Boutique')) {
+                // CORRECTION ICI : On vérifie que ça COMMENCE par 'Achat Boutique' et que ce n'est PAS 'Remboursé'
+                if (tx.label.startsWith('Achat Boutique') && !tx.label.includes('Remboursé')) {
                     h += '<button class="refund-btn" onclick="requestRefund(\\'' + tx._id + '\\')">↩️ Rembourser</button>';
                 }
-                
                 h += '</div>';
             }
             txList.innerHTML = h;
         }
-
         loadShopItems();
       } else { window.location.href = '/bank/login'; }
     }
@@ -759,12 +632,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         const res = await fetch('/api/shop/items');
         const data = await res.json();
         const grid = document.getElementById('shopGrid');
-        
-        if (!data.success || data.items.length === 0) {
-            grid.innerHTML = '<p style="color:var(--muted);grid-column:1/-1;text-align:center;">Aucun article en vente pour le moment.</p>';
-            return;
-        }
-
+        if (!data.success || data.items.length === 0) { grid.innerHTML = '<p style="color:var(--muted);grid-column:1/-1;text-align:center;">Aucun article en vente.</p>'; return; }
         let h = '';
         for (const item of data.items) {
             h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center;display:flex;flex-direction:column;align-items:center;">';
@@ -783,46 +651,31 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
         document.getElementById('successTitle').innerText = "Paiement validé";
         document.getElementById('failTitle').innerText = "Paiement refusé";
         document.getElementById('recapPriceLabel').innerText = "Prix";
+        document.getElementById('recapBox').style.display = 'block';
+        document.getElementById('redirectText').style.display = 'block';
 
         document.getElementById('payOverlay').style.display = 'flex';
         document.getElementById('payOverlay').classList.add('active');
-        
         setPayState('stateCard');
         document.getElementById('termDots').classList.remove('active');
-        
         await new Promise(r => setTimeout(r, 400)); 
-        
         document.getElementById('animCard').classList.add('tapping');
         document.getElementById('termDots').classList.add('active');
 
-        const res = await fetch('/api/shop/purchase', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ itemId })
-        });
+        const res = await fetch('/api/shop/purchase', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId }) });
         const data = await res.json();
 
         await new Promise(r => setTimeout(r, 1500));
         document.getElementById('animCard').classList.remove('tapping');
         document.getElementById('termDots').classList.remove('active');
 
-        if (!data.success) {
-            document.getElementById('failReason').innerText = data.message || "Erreur lors de l'envoi du DM.";
-            setPayState('stateFail');
-            return;
-        }
+        if (!data.success) { document.getElementById('failReason').innerText = data.message; setPayState('stateFail'); return; }
 
         setPayState('stateAcs');
-        
         let pollCount = 0;
         const pollInterval = setInterval(async () => {
             pollCount++;
-            if (pollCount > 60) { 
-                clearInterval(pollInterval);
-                document.getElementById('failReason').innerText = "Délai d'attente dépassé.";
-                setPayState('stateFail');
-                return;
-            }
+            if (pollCount > 60) { clearInterval(pollInterval); document.getElementById('failReason').innerText = "Délai dépassé."; setPayState('stateFail'); return; }
 
             const checkRes = await fetch('/api/shop/check-purchase?transactionId=' + data.transactionId);
             const checkData = await checkRes.json();
@@ -834,11 +687,9 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 
                 userBalance = checkData.newBalance;
                 document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
-                
                 document.getElementById('recapItemName').innerText = checkData.itemName;
                 document.getElementById('recapItemPrice').innerText = '- ' + checkData.itemPrice + ' 🪙';
                 document.getElementById('recapBalance').innerText = userBalance.toLocaleString('fr-FR') + ' 🪙';
-                
                 setPayState('stateSuccess');
                 loadData(); 
 
@@ -846,14 +697,9 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 document.getElementById('redirectCountdown').innerText = countdown;
                 const redirectInterval = setInterval(() => {
                     countdown--;
-                    if (countdown > 0) {
-                        document.getElementById('redirectCountdown').innerText = countdown;
-                    } else {
-                        clearInterval(redirectInterval);
-                        closePayment();
-                    }
+                    if (countdown > 0) document.getElementById('redirectCountdown').innerText = countdown;
+                    else { clearInterval(redirectInterval); closePayment(); }
                 }, 1000);
-
             } else if (checkData.status === 'declined' || checkData.status === 'expired') {
                 clearInterval(pollInterval);
                 document.getElementById('failReason').innerText = checkData.message || "Paiement refusé.";
@@ -864,93 +710,31 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 
     async function requestRefund(txId) {
         document.getElementById('sheetTitle').innerText = "Demande de Remboursement";
-        document.getElementById('successTitle').innerText = "Remboursement validé";
-        document.getElementById('failTitle').innerText = "Remboursement refusé";
-        document.getElementById('recapPriceLabel').innerText = "Remboursé";
-
         document.getElementById('payOverlay').style.display = 'flex';
         document.getElementById('payOverlay').classList.add('active');
 
-        // 1. Scan du ticket
         setPayState('stateRefundScan');
         await new Promise(r => setTimeout(r, 2500));
 
-        // 2. Transmission
         setPayState('stateRefundTransmit');
         await new Promise(r => setTimeout(r, 2000));
 
-        // Appel API pour envoyer la demande
-        const res = await fetch('/api/shop/request-refund', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ txId })
-        });
+        const res = await fetch('/api/shop/request-refund', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ txId }) });
         const data = await res.json();
 
-        if (!data.success) {
+        if (data.success) {
+            setPayState('stateRefundSent');
+            loadData();
+        } else {
+            document.getElementById('failTitle').innerText = "Erreur";
             document.getElementById('failReason').innerText = data.message || "Erreur lors de la demande.";
             setPayState('stateFail');
-            return;
         }
-
-        // 3. Attente validation admin
-        setPayState('stateRefundWait');
-        
-        let pollCount = 0;
-        const pollInterval = setInterval(async () => {
-            pollCount++;
-            if (pollCount > 60) {
-                clearInterval(pollInterval);
-                document.getElementById('failReason').innerText = "Délai d'attente dépassé.";
-                setPayState('stateFail');
-                return;
-            }
-
-            const checkRes = await fetch('/api/shop/check-refund?refundId=' + data.refundId);
-            const checkData = await checkRes.json();
-
-            if (checkData.status === 'approved') {
-                clearInterval(pollInterval);
-                
-                // Contact banque
-                setPayState('stateContactBank');
-                await new Promise(r => setTimeout(r, 2500));
-                
-                userBalance = checkData.newBalance;
-                document.getElementById('dashBalance').innerText = userBalance.toLocaleString('fr-FR') + ' Vigi-Coins';
-                
-                document.getElementById('recapItemName').innerText = checkData.itemName;
-                document.getElementById('recapItemPrice').innerText = '+ ' + checkData.itemPrice + ' 🪙';
-                document.getElementById('recapBalance').innerText = userBalance.toLocaleString('fr-FR') + ' 🪙';
-                
-                setPayState('stateSuccess');
-                loadData(); 
-
-                let countdown = 5;
-                document.getElementById('redirectCountdown').innerText = countdown;
-                const redirectInterval = setInterval(() => {
-                    countdown--;
-                    if (countdown > 0) {
-                        document.getElementById('redirectCountdown').innerText = countdown;
-                    } else {
-                        clearInterval(redirectInterval);
-                        closePayment();
-                    }
-                }, 1000);
-
-            } else if (checkData.status === 'declined' || checkData.status === 'expired') {
-                clearInterval(pollInterval);
-                document.getElementById('failReason').innerText = checkData.message || "Remboursement refusé par l'administration.";
-                setPayState('stateFail');
-            }
-        }, 2000);
     }
 
     function closePayment() {
         document.getElementById('payOverlay').classList.remove('active');
-        setTimeout(() => {
-            document.getElementById('payOverlay').style.display = 'none';
-        }, 500);
+        setTimeout(() => { document.getElementById('payOverlay').style.display = 'none'; }, 500);
     }
 
     async function logout() {
@@ -965,95 +749,62 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     });
 
     // ----------------------------------------------------
-    // GESTIONNAIRE DE BOUTONS DISCORD (DM Validation)
+    // GESTIONNAIRE DE BOUTONS DISCORD
     // ----------------------------------------------------
     client.on('interactionCreate', async (interaction) => {
         if (!interaction.isButton()) return;
 
-        // Gestion des paiements (Achats)
+        // ACHATS
         if (interaction.customId.startsWith('pay_accept_') || interaction.customId.startsWith('pay_decline_')) {
             const txId = interaction.customId.split('_')[2];
             const tx = pendingPayments.get(txId);
-
-            if (!tx) {
-                return interaction.update({ content: "Session de paiement expirée.", components: [] }).catch(()=>{});
-            }
-            if (tx.userId !== interaction.user.id) {
-                return interaction.reply({ content: "Ce n'est pas votre paiement.", ephemeral: true });
-            }
+            if (!tx) return interaction.update({ content: "Session expirée.", components: [] }).catch(()=>{});
+            if (tx.userId !== interaction.user.id) return interaction.reply({ content: "Ce n'est pas votre paiement.", ephemeral: true });
 
             if (interaction.customId.startsWith('pay_accept_')) {
                 const userEco = await Economy.findOne({ userId: tx.userId });
                 const item = await ShopItem.findById(tx.itemId);
-
                 if (!userEco || !item || userEco.balance < item.price) {
-                    tx.status = 'declined';
-                    tx.message = "Fonds insuffisants ou erreur.";
-                    await interaction.update({ content: `❌ **Paiement refusé**\nRaison : Fonds insuffisants.`, components: [] });
+                    tx.status = 'declined'; tx.message = "Fonds insuffisants.";
+                    await interaction.update({ content: `❌ **Paiement refusé**\nFonds insuffisants.`, components: [] });
                     return;
                 }
-
                 userEco.balance -= item.price;
                 userEco.transactions.push({ amount: -item.price, label: `Achat Boutique: ${item.name}` });
                 await userEco.save();
-
-                tx.status = 'approved';
-                tx.newBalance = userEco.balance;
-                tx.itemName = item.name;
-                tx.itemPrice = item.price;
-
-                await interaction.update({ content: `✅ **Paiement validé**\nVous avez obtenu : **${item.name}**\nNouveau solde : ${userEco.balance} 🪙`, components: [] });
+                tx.status = 'approved'; tx.newBalance = userEco.balance; tx.itemName = item.name; tx.itemPrice = item.price;
+                await interaction.update({ content: `✅ **Paiement validé**\nObtenu : **${item.name}**\nNouveau solde : ${userEco.balance} 🪙`, components: [] });
             } else {
-                tx.status = 'declined';
-                tx.message = "Paiement refusé par l'utilisateur.";
-                await interaction.update({ content: `❌ **Paiement refusé**\nVous avez annulé la transaction.`, components: [] });
+                tx.status = 'declined'; tx.message = "Refusé par l'utilisateur.";
+                await interaction.update({ content: `❌ **Paiement refusé**`, components: [] });
             }
         }
 
-        // Gestion des remboursements
+        // REMBOURSEMENTS
         if (interaction.customId.startsWith('refund_accept_') || interaction.customId.startsWith('refund_decline_')) {
-            const refId = interaction.customId.split('_')[2];
-            const ref = pendingRefunds.get(refId);
-
-            if (!ref) {
-                return interaction.update({ content: "Demande de remboursement expirée.", components: [] }).catch(()=>{});
-            }
+            const refundId = interaction.customId.split('_')[2];
+            const ref = pendingRefunds.get(refundId);
+            if (!ref) return interaction.update({ content: "Demande expirée.", components: [] }).catch(()=>{});
 
             if (interaction.customId.startsWith('refund_accept_')) {
                 const userEco = await Economy.findOne({ userId: ref.userId });
-                if (!userEco) {
-                    ref.status = 'declined';
-                    ref.message = "Compte introuvable.";
-                    await interaction.update({ content: `❌ **Erreur**\nCompte introuvable.`, components: [] });
-                    return;
-                }
+                if (!userEco) { pendingRefunds.delete(refundId); return interaction.update({ content: `❌ Erreur: Compte introuvable.`, components: [] }); }
 
                 const tx = userEco.transactions.id(ref.txId);
-                if (!tx) {
-                    ref.status = 'declined';
-                    ref.message = "Transaction introuvable.";
-                    await interaction.update({ content: `❌ **Erreur**\nTransaction introuvable.`, components: [] });
-                    return;
+                if (!tx) { pendingRefunds.delete(refundId); return interaction.update({ content: `❌ Erreur: Transaction introuvable.`, components: [] }); }
+
+                if (!tx.label.includes("(Remboursé)")) {
+                    const refundAmount = Math.abs(tx.amount);
+                    userEco.balance += refundAmount;
+                    tx.label += " (Remboursé)";
+                    userEco.transactions.push({ amount: refundAmount, label: `Remboursement: ${tx.label.replace(" (Remboursé)", "")}` });
+                    await userEco.save();
                 }
-
-                const refundAmount = Math.abs(tx.amount);
-                userEco.balance += refundAmount;
-                
-                // On marque la transaction comme remboursée et on ajoute une nouvelle transaction positive
-                tx.label += " (Remboursé)";
-                userEco.transactions.push({ amount: refundAmount, label: `Remboursement: ${tx.label.replace(' (Remboursé)', '')}` });
-                await userEco.save();
-
-                ref.status = 'approved';
-                ref.newBalance = userEco.balance;
-                ref.itemName = tx.label.replace(' (Remboursé)', '');
-                ref.itemPrice = refundAmount;
-
-                await interaction.update({ content: `✅ **Remboursement approuvé**\n<@${ref.userId}> a été remboursé de **${refundAmount} 🪙**.`, components: [] });
+                pendingRefunds.delete(refundId);
+                await interaction.update({ content: `✅ **Remboursement approuvé**\n<@${ref.userId}> a été remboursé de **${ref.amount} 🪙**.`, components: [] });
             } else {
-                ref.status = 'declined';
-                ref.message = "Remboursement refusé par l'administration.";
-                await interaction.update({ content: `❌ **Remboursement refusé**\nVous avez refusé la demande.`, components: [] });
+                pendingRefunds.delete(refundId);
+                await interaction.update({ content: `❌ **Remboursement refusé** par l'administration.`, components: [] });
             }
         }
     });
