@@ -243,7 +243,6 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     router.get('/api/bank/recipients', requireLogin, async (req, res) => {
         try {
             const currentUserId = req.session.bankUserId;
-            // On cherche tous les comptes qui ont un identifiant bancaire, sauf l'utilisateur actuel
             const accounts = await Economy.find({ bankIdentifier: { $ne: null, $exists: true } });
             
             const guildId = process.env.GUILD_ID;
@@ -251,9 +250,9 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             const recipients = [];
             
             for (const acc of accounts) {
-                if (acc.userId === currentUserId) continue; // Ne pas s'afficher soi-même
+                if (acc.userId === currentUserId) continue; 
                 
-                let name = acc.bankIdentifier; // Fallback
+                let name = acc.bankIdentifier; 
                 if (guild) {
                     try {
                         const member = await guild.members.fetch(acc.userId);
@@ -291,11 +290,11 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             if (senderEco.balance < amt) return res.json({ success: false, message: "Fonds insuffisants." });
 
             senderEco.balance -= amt;
-            senderEco.transactions.push({ amount: -amt, label: `Virement à ${cleanIdent}` });
+            senderEco.transactions.push({ amount: -amt, label: 'Virement à ' + cleanIdent });
             await senderEco.save();
 
             recipientEco.balance += amt;
-            recipientEco.transactions.push({ amount: amt, label: `Virement de ${senderEco.bankIdentifier}` });
+            recipientEco.transactions.push({ amount: amt, label: 'Virement de ' + senderEco.bankIdentifier });
             await recipientEco.save();
 
             res.json({ success: true, newBalance: senderEco.balance });
@@ -342,7 +341,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                         new ButtonBuilder().setCustomId('pay_accept_' + txId).setLabel('✅ Autoriser le paiement').setStyle(ButtonStyle.Success),
                         new ButtonBuilder().setCustomId('pay_decline_' + txId).setLabel('❌ Refuser').setStyle(ButtonStyle.Danger)
                     );
-                await user.send({ content: `🔐 **Vigi-Banque - Authentification de paiement**\n\nVous tentez d'acheter **${item.name}** pour **${item.price} 🪙**.\nVeuillez confirmer cette transaction.`, components: [row] });
+                await user.send({ content: '🔐 **Vigi-Banque - Authentification de paiement**\n\nVous tentez d\'acheter **' + item.name + '** pour **' + item.price + ' 🪙**.\nVeuillez confirmer cette transaction.', components: [row] });
             } catch (e) {
                 return res.json({ success: false, message: "DM impossible à envoyer. Veuillez ouvrir vos messages privés." });
             }
@@ -407,7 +406,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                     new ButtonBuilder().setCustomId('refund_decline_' + refundId).setLabel('❌ Refuser').setStyle(ButtonStyle.Danger)
                 );
             
-            await channel.send({ content: `↩️ **Vigi-Banque - Demande de Remboursement**\n\n**Employé :** <@${userId}>\n**Article :** ${tx.label}\n**Montant à rembourser :** ${Math.abs(tx.amount)} 🪙\n\nVeuillez traiter cette demande :`, components: [row] });
+            await channel.send({ content: '↩️ **Vigi-Banque - Demande de Remboursement**\n\n**Employé :** <@' + userId + '>\n**Article :** ' + tx.label + '\n**Montant à rembourser :** ' + Math.abs(tx.amount) + ' 🪙\n\nVeuillez traiter cette demande :', components: [row] });
 
             res.json({ success: true, message: "Demande envoyée" });
         } catch (error) {
@@ -893,7 +892,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             } else {
                 select.innerHTML = '<option value="">Sélectionnez un destinataire...</option>';
                 data.recipients.forEach(r => {
-                    select.innerHTML += `<option value="${r.id}">${r.name}</option>`;
+                    select.innerHTML += '<option value="' + r.id + '">' + r.name + '</option>';
                 });
             }
         }
@@ -1153,17 +1152,17 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 const item = await ShopItem.findById(tx.itemId);
                 if (!userEco || !item || userEco.balance < item.price) {
                     tx.status = 'declined'; tx.message = "Fonds insuffisants.";
-                    await interaction.update({ content: `❌ **Paiement refusé**\nFonds insuffisants.`, components: [] });
+                    await interaction.update({ content: '❌ **Paiement refusé**\nFonds insuffisants.', components: [] });
                     return;
                 }
                 userEco.balance -= item.price;
-                userEco.transactions.push({ amount: -item.price, label: `Achat Boutique: ${item.name}` });
+                userEco.transactions.push({ amount: -item.price, label: 'Achat Boutique: ' + item.name });
                 await userEco.save();
                 tx.status = 'approved'; tx.newBalance = userEco.balance; tx.itemName = item.name; tx.itemPrice = item.price;
-                await interaction.update({ content: `✅ **Paiement validé**\nObtenu : **${item.name}**\nNouveau solde : ${userEco.balance} 🪙`, components: [] });
+                await interaction.update({ content: '✅ **Paiement validé**\nObtenu : **' + item.name + '**\nNouveau solde : ' + userEco.balance + ' 🪙', components: [] });
             } else {
                 tx.status = 'declined'; tx.message = "Refusé par l'utilisateur.";
-                await interaction.update({ content: `❌ **Paiement refusé**`, components: [] });
+                await interaction.update({ content: '❌ **Paiement refusé**', components: [] });
             }
         }
 
@@ -1174,23 +1173,23 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 
             if (interaction.customId.startsWith('refund_accept_')) {
                 const userEco = await Economy.findOne({ userId: ref.userId });
-                if (!userEco) { pendingRefunds.delete(refundId); return interaction.update({ content: `❌ Erreur: Compte introuvable.`, components: [] }); }
+                if (!userEco) { pendingRefunds.delete(refundId); return interaction.update({ content: '❌ Erreur: Compte introuvable.', components: [] }); }
 
                 const tx = userEco.transactions.id(ref.txId);
-                if (!tx) { pendingRefunds.delete(refundId); return interaction.update({ content: `❌ Erreur: Transaction introuvable.`, components: [] }); }
+                if (!tx) { pendingRefunds.delete(refundId); return interaction.update({ content: '❌ Erreur: Transaction introuvable.', components: [] }); }
 
                 if (!tx.label.includes("(Remboursé)")) {
                     const refundAmount = Math.abs(tx.amount);
                     userEco.balance += refundAmount;
                     tx.label += " (Remboursé)";
-                    userEco.transactions.push({ amount: refundAmount, label: `Remboursement: ${tx.label.replace(" (Remboursé)", "")}` });
+                    userEco.transactions.push({ amount: refundAmount, label: 'Remboursement: ' + tx.label.replace(' (Remboursé)', '') });
                     await userEco.save();
                 }
                 pendingRefunds.delete(refundId);
-                await interaction.update({ content: `✅ **Remboursement approuvé**\n<@${ref.userId}> a été remboursé de **${ref.amount} 🪙**.`, components: [] });
+                await interaction.update({ content: '✅ **Remboursement approuvé**\n<@' + ref.userId + '> a été remboursé de **' + ref.amount + ' 🪙**.', components: [] });
             } else {
                 pendingRefunds.delete(refundId);
-                await interaction.update({ content: `❌ **Remboursement refusé** par l'administration.`, components: [] });
+                await interaction.update({ content: '❌ **Remboursement refusé** par l\'administration.', components: [] });
             }
         }
     });
