@@ -40,7 +40,6 @@ mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log("🟢 Connecté à MongoDB (Vigi-Access Économie) !"))
     .catch(err => console.error("🔴 Erreur de connexion MongoDB :", err));
 
-// Base de données Vigi (Économie, Banque, Transactions, Style de carte)
 const EconomySchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true },
     balance: { type: Number, default: 0 },
@@ -48,7 +47,7 @@ const EconomySchema = new mongoose.Schema({
     bankCode: { type: String, default: null },
     bankIdentifier: { type: String, default: null },
     bankFrozen: { type: Boolean, default: false },
-    cardStyle: { type: String, default: 'dark' }, // NOUVEAU : Style de la carte bancaire
+    cardStyle: { type: String, default: 'dark' },
     transactions: [{
         amount: Number,
         label: String,
@@ -57,7 +56,6 @@ const EconomySchema = new mongoose.Schema({
 });
 const Economy = mongoose.model('Economy', EconomySchema);
 
-// Base de données des articles de la boutique
 const ShopItemSchema = new mongoose.Schema({
     name: { type: String, required: true },
     description: { type: String, required: true },
@@ -80,7 +78,7 @@ let config = {
     messageId: '',
     messageContent: "Veuillez lire le règlement ci-dessous et cliquer sur le bouton pour accepter.",
     statusType: 'Playing',            
-    statusText: 'Veiller sur le serveur',
+    statusText: 'Vigi-access',
     paydayDay: 5,
     paydayHour: 18,
     lastPaydayProcessed: null,
@@ -90,7 +88,6 @@ let config = {
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/', embedBuilderRoute(client));
-// On passe les modèles Economy et ShopItem aux routeurs
 app.use('/', economyManagerRoute(client, dbNova, Economy, ShopItem));
 app.use('/', bankManagerRoute(client, dbNova, Economy, ShopItem));
 
@@ -171,6 +168,60 @@ app.get('/api/guild/:guildId/data', async (req, res) => {
     res.json({ channels, roles });
 });
 
+// NOUVELLE API : Récupérer les membres du serveur
+app.get('/api/guild/:guildId/members', async (req, res) => {
+    const guild = client.guilds.cache.get(req.params.guildId);
+    if (!guild) return res.status(404).json({ error: 'Serveur introuvable' });
+    
+    await guild.members.fetch(); // On force le chargement des membres en cache
+    const members = guild.members.cache
+        .filter(m => !m.user.bot) // On ignore les bots
+        .map(m => ({ id: m.id, name: m.user.username }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+        
+    res.json({ success: true, members });
+});
+
+// NOUVELLE API : Récupérer les rôles actuels d'un membre
+app.get('/api/guild/:guildId/member/:userId/roles', async (req, res) => {
+    const guild = client.guilds.cache.get(req.params.guildId);
+    if (!guild) return res.status(404).json({ error: 'Serveur introuvable' });
+    try {
+        const member = await guild.members.fetch(req.params.userId);
+        if (!member) return res.status(404).json({ error: 'Membre introuvable' });
+        const roles = member.roles.cache.filter(r => r.id !== guild.id).map(r => r.id);
+        res.json({ success: true, roles });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// NOUVELLE API : Mettre à jour les rôles d'un membre
+app.post('/api/guild/:guildId/member/:userId/roles', async (req, res) => {
+    const { guildId, userId } = req.params;
+    const { roles } = req.body; // Tableau des IDs de rôles sélectionnés
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return res.status(404).json({ error: 'Serveur introuvable' });
+    
+    try {
+        const member = await guild.members.fetch(userId);
+        if (!member) return res.status(404).json({ error: 'Membre introuvable' });
+
+        const currentRoles = member.roles.cache.filter(r => r.id !== guild.id && !r.managed).map(r => r.id);
+        const newRoles = roles.filter(r => r !== guild.id);
+
+        const rolesToAdd = newRoles.filter(r => !currentRoles.includes(r));
+        const rolesToRemove = currentRoles.filter(r => !newRoles.includes(r));
+
+        if (rolesToAdd.length > 0) await member.roles.add(rolesToAdd, "Dashboard Vigi-Access");
+        if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove, "Dashboard Vigi-Access");
+
+        res.json({ success: true, message: "Rôles mis à jour avec succès !" });
+    } catch (e) {
+        res.json({ success: false, message: e.message });
+    }
+});
+
 app.post('/api/status', (req, res) => {
     config.statusType = req.body.statusType;
     config.statusText = req.body.statusText;
@@ -215,6 +266,7 @@ app.get('/', (req, res) => {
             select, input[type="text"], input[type="number"], textarea { width: 100%; background: rgba(14, 15, 18, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 14px 16px; color: #e6e8eb; font-size: 15px; outline: none; transition: all 0.2s; }
             select:focus, input:focus, textarea:focus { border-color: #5865F2; box-shadow: 0 0 0 4px rgba(88, 101, 242, 0.1); }
             textarea { resize: vertical; min-height: 120px; font-family: 'Inter', sans-serif; }
+            select[multiple] { height: 180px; padding: 12px; }
             .btn { border: none; padding: 16px 24px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; transition: all 0.3s; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: center; gap: 8px; }
             .btn-primary { background: linear-gradient(135deg, #5865F2, #4752c4); color: white; box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3); }
             .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(88, 101, 242, 0.4); }
@@ -232,7 +284,6 @@ app.get('/', (req, res) => {
             @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
             .row { display: flex; gap: 20px; }
             .row .form-group { flex: 1; }
-            select[multiple] { height: 140px; padding: 12px; }
             .link-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 30px; }
             .link-card { background: rgba(14, 15, 18, 0.8); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 24px; text-decoration: none; color: #e6e8eb; text-align: center; font-weight: 600; transition: all 0.3s; display: flex; flex-direction: column; align-items: center; gap: 10px; }
             .link-card:hover { border-color: #5865F2; transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
@@ -279,6 +330,25 @@ app.get('/', (req, res) => {
                     <div class="form-group"><label for="messageId">ID message (Pour éditer)</label><input type="text" id="messageId" name="messageId" value="${config.messageId}"></div>
                     <button type="submit" id="submitBtn" class="btn btn-primary">🚀 Envoyer le Règlement</button>
                     <button type="button" id="editBtn" class="btn btn-secondary">✏️ Modifier le message existant</button>
+                </form>
+            </div>
+
+            <!-- NOUVELLE SECTION GESTION DES RÔLES -->
+            <div class="glass-card">
+                <h2>👥 Gestion des Membres</h2>
+                <div id="memberAlert" class="alert"></div>
+                <form id="memberForm">
+                    <div class="row">
+                        <div class="form-group">
+                            <label for="memberId">Sélectionner un membre</label>
+                            <select id="memberId" name="memberId" disabled required><option value="">Sélectionne un serveur d'abord</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="memberRoles">Rôles (Maintiens Ctrl pour choisir)</label>
+                            <select id="memberRoles" name="memberRoles" multiple disabled required></select>
+                        </div>
+                    </div>
+                    <button type="submit" id="memberBtn" class="btn btn-primary">💾 Sauvegarder les rôles</button>
                 </form>
             </div>
 
@@ -365,6 +435,13 @@ app.get('/', (req, res) => {
             const statusBtn = document.getElementById('statusBtn');
             const statusAlert = document.getElementById('statusAlert');
 
+            // NOUVEAU : Éléments Gestion des Membres
+            const memberSelect = document.getElementById('memberId');
+            const memberRolesSelect = document.getElementById('memberRoles');
+            const memberForm = document.getElementById('memberForm');
+            const memberBtn = document.getElementById('memberBtn');
+            const memberAlert = document.getElementById('memberAlert');
+
             async function loadGuilds() {
                 const res = await fetch('/api/guilds');
                 const guilds = await res.json();
@@ -375,19 +452,89 @@ app.get('/', (req, res) => {
             guildSelect.addEventListener('change', async (e) => {
                 const guildId = e.target.value;
                 channelSelect.disabled = true; roleSelect.disabled = true; logChannelSelect.disabled = true; rrChannelSelect.disabled = true; rrRolesSelect.disabled = true;
+                memberSelect.disabled = true; memberRolesSelect.disabled = true;
                 channelSelect.innerHTML = '<option>Chargement...</option>'; roleSelect.innerHTML = '<option>Chargement...</option>'; logChannelSelect.innerHTML = '<option>Chargement...</option>'; rrChannelSelect.innerHTML = '<option>Chargement...</option>'; rrRolesSelect.innerHTML = '<option>Chargement...</option>';
+                memberSelect.innerHTML = '<option>Chargement...</option>'; memberRolesSelect.innerHTML = '';
+                
                 if (!guildId) return;
+                
+                // Charger salons et rôles
                 const res = await fetch('/api/guild/' + guildId + '/data');
                 const data = await res.json();
+                
                 channelSelect.innerHTML = data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
                 logChannelSelect.innerHTML = '<option value="">Aucun</option>' + data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
                 roleSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
                 rrChannelSelect.innerHTML = data.channels.map(c => '<option value="' + c.id + '">#' + c.name + '</option>').join('');
                 rrRolesSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
+                
+                // Charger les membres (NOUVEAU)
+                const memRes = await fetch('/api/guild/' + guildId + '/members');
+                const memData = await memRes.json();
+                if (memData.success) {
+                    memberSelect.innerHTML = '<option value="">-- Sélectionner un membre --</option>' + memData.members.map(m => '<option value="' + m.id + '">' + m.name + '</option>').join('');
+                    memberRolesSelect.innerHTML = data.roles.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
+                    memberSelect.disabled = false;
+                    memberRolesSelect.disabled = false;
+                }
+
                 channelSelect.disabled = false; roleSelect.disabled = false; logChannelSelect.disabled = false; rrChannelSelect.disabled = false; rrRolesSelect.disabled = false;
                 if ("${config.channelId}") channelSelect.value = "${config.channelId}";
                 if ("${config.logChannelId}") logChannelSelect.value = "${config.logChannelId}";
                 if ("${config.roleId}") roleSelect.value = "${config.roleId}";
+            });
+
+            // NOUVEAU : Quand on change de membre, on charge ses rôles actuels
+            memberSelect.addEventListener('change', async (e) => {
+                const guildId = guildSelect.value;
+                const userId = e.target.value;
+                if (!userId) return;
+
+                const res = await fetch('/api/guild/' + guildId + '/member/' + userId + '/roles');
+                const data = await res.json();
+                
+                if (data.success) {
+                    // On décoche tout
+                    Array.from(memberRolesSelect.options).forEach(opt => opt.selected = false);
+                    // On coche les rôles du membre
+                    data.roles.forEach(roleId => {
+                        const opt = memberRolesSelect.querySelector('option[value="' + roleId + '"]');
+                        if (opt) opt.selected = true;
+                    });
+                }
+            });
+
+            // NOUVEAU : Sauvegarder les rôles
+            memberForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const guildId = guildSelect.value;
+                const userId = memberSelect.value;
+                if (!guildId || !userId) return;
+
+                memberBtn.disabled = true;
+                memberBtn.innerText = 'Sauvegarde...';
+                memberAlert.style.display = 'none';
+
+                const selectedRoles = Array.from(memberRolesSelect.selectedOptions).map(opt => opt.value);
+
+                try {
+                    const res = await fetch('/api/guild/' + guildId + '/member/' + userId + '/roles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ roles: selectedRoles })
+                    });
+                    const result = await res.json();
+
+                    memberAlert.style.display = 'flex';
+                    memberAlert.className = 'alert ' + (result.success ? 'success' : 'error');
+                    memberAlert.innerText = (result.success ? '✅ ' : '❌ Erreur : ') + (result.message || 'Rôles mis à jour !');
+                } catch (err) {
+                    memberAlert.style.display = 'flex';
+                    memberAlert.className = 'alert error';
+                    memberAlert.innerText = '❌ Erreur réseau.';
+                }
+                memberBtn.disabled = false;
+                memberBtn.innerText = '💾 Sauvegarder les rôles';
             });
 
             form.addEventListener('submit', async (e) => {
