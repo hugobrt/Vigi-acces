@@ -162,6 +162,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             if (userEco.bankFrozen) return res.json({ success: false, message: 'Votre compte est gelé. Contactez l\'administration.' });
 
             req.session.bankUserId = userEco.userId;
+            req.session.isAdminView = false; // Ce n'est pas un admin qui se connecte ici
             res.json({ success: true });
         } catch (error) {
             console.error(error);
@@ -175,6 +176,15 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
     router.post('/bank/logout', (req, res) => {
         req.session.destroy();
         res.json({ success: true });
+    });
+
+    // ----------------------------------------------------
+    // ROUTE 3.5 : ACCES ADMIN DIRECT (Vue Admin)
+    // ----------------------------------------------------
+    router.get('/bank/admin-view/:userId', (req, res) => {
+        req.session.bankUserId = req.params.userId;
+        req.session.isAdminView = true;
+        res.redirect('/bank');
     });
 
     // ----------------------------------------------------
@@ -213,7 +223,8 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 username,
                 frozen: userEco.bankFrozen,
                 cardStyle: userEco.cardStyle || 'dark',
-                transactions: userEco.transactions.slice().reverse()
+                transactions: userEco.transactions.slice().reverse(),
+                isAdminView: req.session.isAdminView || false // NOUVEAU
             });
         } catch (error) {
             console.error(error);
@@ -565,6 +576,11 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
 </style>
 </head>
 <body>
+  <!-- BANNIERE ADMIN (NOUVEAU) -->
+  <div id="adminBanner" style="display:none;background:#f23f42;color:#fff;padding:10px;text-align:center;font-weight:bold;position:fixed;top:0;left:0;width:100%;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,0.5);">
+    ⚠️ MODE ADMINISTRATEUR — Vous visionnez le compte d'un employé
+  </div>
+
   <div class="frozen-overlay" id="frozenScreen">
     <div class="frozen-icon">🔒</div>
     <h1>Compte Gelé</h1>
@@ -840,6 +856,12 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
       if (data.success) {
         if (data.frozen) { document.getElementById('frozenScreen').style.display = 'flex'; return; }
 
+        // NOUVEAU : Afficher la bannière admin si on est en Vue Admin
+        if (data.isAdminView) {
+            document.getElementById('adminBanner').style.display = 'block';
+            document.querySelector('.dash-wrap').style.marginTop = '40px';
+        }
+
         userBalance = data.balance;
         currentCardStyle = data.cardStyle || 'dark';
         applyCardStyle(currentCardStyle);
@@ -878,7 +900,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             txList.innerHTML = h;
         }
         loadShopItems();
-        loadRecipients(); // Charger la liste des destinataires
+        loadRecipients(); 
       } else { window.location.href = '/bank/login'; }
     }
 
