@@ -32,7 +32,7 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                 .badge.confirmed { background: rgba(45, 199, 112, 0.1); color: #2dc770; border: 1px solid rgba(45, 199, 112, 0.2); }
                 .badge.frozen { background: rgba(88, 101, 242, 0.1); color: #5865F2; border: 1px solid rgba(88, 101, 242, 0.2); }
                 .badge.active { background: rgba(45, 199, 112, 0.1); color: #2dc770; border: 1px solid rgba(45, 199, 112, 0.2); }
-                .btn { border: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-right: 5px; margin-bottom: 5px; color: #fff; }
+                .btn { border: none; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-right: 5px; margin-bottom: 5px; color: #fff; text-decoration: none; display: inline-block; }
                 .btn-blue { background: linear-gradient(135deg, #5865F2, #4752c4); }
                 .btn-red { background: linear-gradient(135deg, #f23f42, #c93538); }
                 .btn-gold { background: linear-gradient(135deg, #FFD700, #FFB800); color: black; }
@@ -222,6 +222,10 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
                         htmlContent += '<td style="font-family: monospace; letter-spacing: 2px; color: #FFD700;">' + acc.bankCode + '</td>';
                         htmlContent += '<td><span class="badge ' + statusClass + '">' + statusText + '</span></td>';
                         htmlContent += '<td>';
+                        
+                        // BOUTON VUE ADMIN (NOUVEAU)
+                        htmlContent += '<a href="/bank/admin-view/' + acc.userId + '" target="_blank" class="btn btn-blue" style="text-decoration:none; display:inline-block; margin-bottom:5px; line-height:20px;">👁️ Vue Admin</a>';
+                        
                         if (acc.bankFrozen) {
                             htmlContent += '<button class="btn btn-green" onclick="toggleFreeze(\\'' + acc.userId + '\\')">Dégeler</button>';
                         } else {
@@ -435,24 +439,27 @@ module.exports = function(client, dbNova, Economy, ShopItem) {
             const { userId, identifier } = req.body;
             let userEco = await Economy.findOne({ userId: String(userId) });
             
-            const existingIdent = await Economy.findOne({ bankIdentifier: identifier });
+            // ON FORCE EN MINUSCULES ICI
+            const cleanIdent = identifier ? identifier.trim().toLowerCase() : null;
+            
+            const existingIdent = await Economy.findOne({ bankIdentifier: cleanIdent });
             if (existingIdent) return res.json({ success: false, message: "Cet identifiant est déjà utilisé." });
 
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             
             if (userEco) {
                 userEco.bankCode = code;
-                userEco.bankIdentifier = identifier;
+                userEco.bankIdentifier = cleanIdent;
                 userEco.bankFrozen = false;
                 await userEco.save();
             } else {
-                await Economy.create({ userId: String(userId), balance: 0, bankCode: code, bankIdentifier: identifier });
+                await Economy.create({ userId: String(userId), balance: 0, bankCode: code, bankIdentifier: cleanIdent });
             }
 
             try {
                 const user = await client.users.fetch(userId);
                 const bankUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
-                await user.send(`🏦 **Vigi-Banque - Compte Créé**\n\nBonjour ! Votre compte bancaire a été ouvert par l'administration.\n\n**Identifiant :** ${identifier}\n**Code d'accès :** ${code}\n\nGardez précieusement ce code. Vous pouvez accéder à votre banque ici : ${bankUrl}/bank/login`);
+                await user.send('🏦 **Vigi-Banque - Compte Créé**\n\nBonjour ! Votre compte bancaire a été ouvert par l\'administration.\n\n**Identifiant :** ' + cleanIdent + '\n**Code d\'accès :** ' + code + '\n\nGardez précieusement ce code. Vous pouvez accéder à votre banque ici : ' + bankUrl + '/bank/login');
             } catch (e) { console.log("DM impossible à envoyer."); }
 
             res.json({ success: true, message: "Compte créé et DM envoyé à l'employé !" });
